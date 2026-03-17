@@ -10,6 +10,15 @@ const empty = (pid: string): Omit<ExerciseYear, 'id' | 'created_at'> => ({
   rates_paid_casa: 0, rates_paid_box: 0, rates_paid_cantina: 0,
 });
 
+function NumField({ label, field, data, onChange }: { label: string; field: string; data: any; onChange: (f: string, v: string) => void }) {
+  return (
+    <div>
+      <label>{label}</label>
+      <input type="number" step="0.01" value={data[field] ?? 0} onChange={e => onChange(field, e.target.value)} />
+    </div>
+  );
+}
+
 export default function ExerciseYearsPage({ property }: { property: Property }) {
   const [years, setYears] = useState<ExerciseYear[]>([]);
   const [editing, setEditing] = useState<Partial<ExerciseYear> | null>(null);
@@ -22,10 +31,10 @@ export default function ExerciseYearsPage({ property }: { property: Property }) 
 
   const openNew = () => { setEditing(empty(property.id)); setIsNew(true); };
   const openEdit = (y: ExerciseYear) => { setEditing({ ...y }); setIsNew(false); };
-  const cancel = () => { setEditing(null); };
+  const cancel = () => setEditing(null);
 
   const save = async () => {
-    if (!editing) return;
+    if (!editing?.year_label) return;
     const saved = await upsertExerciseYear(editing as any);
     if (isNew) setYears(p => [...p, saved]);
     else setYears(p => p.map(y => y.id === saved.id ? saved : y));
@@ -38,44 +47,50 @@ export default function ExerciseYearsPage({ property }: { property: Property }) 
     setYears(p => p.filter(y => y.id !== id));
   };
 
-  const num = (field: string, val: string) => setEditing(p => ({ ...p, [field]: parseFloat(val) || 0 }));
+  const num = (f: string, v: string) => setEditing(p => ({ ...p, [f]: parseFloat(v) || 0 }));
 
   if (loading) return <Loader />;
 
   return (
-    <div style={{ padding: '20px 16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 22 }}>Saldo Esercizio</h2>
-        <button className="btn-primary" onClick={openNew} style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Plus size={15} /> Nuovo anno</button>
+    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 22 }}>Saldo Esercizio</h2>
+          <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>{years.length} anni registrati</p>
+        </div>
+        <button className="btn-primary" onClick={openNew}><Plus size={15} /> Nuovo anno</button>
       </div>
 
       {editing && (
-        <div className="card" style={{ marginBottom: 20, position: 'relative' }}>
-          <h3 style={{ fontFamily: 'var(--font-display)', marginBottom: 16, fontSize: 18 }}>{isNew ? 'Nuovo anno' : `Modifica ${editing.year_label}`}</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="card" style={{ border: '2px solid var(--accent)' }}>
+          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 16 }}>
+            {isNew ? '+ Nuovo anno' : `Modifica ${editing.year_label}`}
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
-              <label style={{ color: 'var(--text2)', fontSize: 12, display: 'block', marginBottom: 6 }}>Anno (es. 24/25)</label>
-              <input value={editing.year_label || ''} onChange={e => setEditing(p => ({ ...p, year_label: e.target.value }))} placeholder="24/25" />
+              <label>Anno esercizio</label>
+              <input value={editing.year_label || ''} onChange={e => setEditing(p => ({ ...p, year_label: e.target.value }))} placeholder="es. 25/26" />
             </div>
-            <p style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 500 }}>Saldi iniziali (da esercizio precedente)</p>
-            <div className="grid3">
-              {['casa', 'box', 'cantina'].map(t => (
-                <div key={t}>
-                  <label style={{ color: 'var(--text2)', fontSize: 11, display: 'block', marginBottom: 4, textTransform: 'capitalize' }}>{t}</label>
-                  <input type="number" step="0.01" value={(editing as any)[`balance_start_${t}`] || 0} onChange={e => num(`balance_start_${t}`, e.target.value)} />
-                </div>
-              ))}
+
+            <div style={{ background: 'var(--bg2)', borderRadius: 10, padding: '14px' }}>
+              <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 10 }}>SALDI INIZIALI (da esercizio precedente)</p>
+              <div className="grid3">
+                <NumField label="Casa (€)" field="balance_start_casa" data={editing} onChange={num} />
+                <NumField label="Box (€)" field="balance_start_box" data={editing} onChange={num} />
+                <NumField label="Cantina (€)" field="balance_start_cantina" data={editing} onChange={num} />
+              </div>
             </div>
-            <p style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 500 }}>Rate versate (negative = pagato)</p>
-            <div className="grid3">
-              {['casa', 'box', 'cantina'].map(t => (
-                <div key={t}>
-                  <label style={{ color: 'var(--text2)', fontSize: 11, display: 'block', marginBottom: 4, textTransform: 'capitalize' }}>{t}</label>
-                  <input type="number" step="0.01" value={(editing as any)[`rates_paid_${t}`] || 0} onChange={e => num(`rates_paid_${t}`, e.target.value)} />
-                </div>
-              ))}
+
+            <div style={{ background: 'var(--bg2)', borderRadius: 10, padding: '14px' }}>
+              <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 10 }}>RATE VERSATE (negative = hai pagato)</p>
+              <div className="grid3">
+                <NumField label="Casa (€)" field="rates_paid_casa" data={editing} onChange={num} />
+                <NumField label="Box (€)" field="rates_paid_box" data={editing} onChange={num} />
+                <NumField label="Cantina (€)" field="rates_paid_cantina" data={editing} onChange={num} />
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button className="btn-ghost" onClick={cancel}><X size={14} /> Annulla</button>
               <button className="btn-primary" onClick={save}><Check size={14} /> Salva</button>
             </div>
@@ -83,40 +98,56 @@ export default function ExerciseYearsPage({ property }: { property: Property }) 
         </div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {years.length === 0 && !editing && (
-          <p style={{ color: 'var(--text2)', textAlign: 'center', padding: 20 }}>Nessun anno inserito.</p>
-        )}
-        {[...years].reverse().map(y => {
-          const saldoCasa = y.balance_start_casa + y.rates_paid_casa;
-          const saldoBox = y.balance_start_box + y.rates_paid_box;
-          const saldoCantina = y.balance_start_cantina + y.rates_paid_cantina;
-          const totale = saldoCasa + saldoBox + saldoCantina;
-          return (
-            <div key={y.id} className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-                <div>
-                  <span className="tag tag-gold">{y.year_label}</span>
-                  <p style={{ marginTop: 8, fontSize: 22, fontWeight: 700, fontFamily: 'var(--font-display)', color: totale >= 0 ? 'var(--green)' : 'var(--red)' }}>€ {fmt(totale)}</p>
-                  <p style={{ color: 'var(--text2)', fontSize: 11 }}>saldo totale</p>
-                </div>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="btn-ghost" onClick={() => openEdit(y)} style={{ padding: '6px 10px' }}><Pencil size={14} /></button>
-                  <button className="btn-danger" onClick={() => del(y.id)} style={{ padding: '6px 10px' }}><Trash2 size={14} /></button>
-                </div>
+      {years.length === 0 && !editing && (
+        <div style={{ textAlign: 'center', padding: 30, background: '#fff', borderRadius: 16, border: '1px solid var(--border)' }}>
+          <p style={{ color: 'var(--text2)' }}>Nessun anno inserito.</p>
+        </div>
+      )}
+
+      {[...years].reverse().map(y => {
+        const saldoCasa = y.balance_start_casa + y.rates_paid_casa;
+        const saldoBox = y.balance_start_box + y.rates_paid_box;
+        const saldoCantina = y.balance_start_cantina + y.rates_paid_cantina;
+        const totale = saldoCasa + saldoBox + saldoCantina;
+        return (
+          <div key={y.id} className="card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+              <div>
+                <span className="tag tag-blue">{y.year_label}</span>
+                <p style={{ marginTop: 8, fontSize: 26, fontWeight: 700, fontFamily: 'var(--font-display)', color: totale >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                  {totale >= 0 ? '+' : ''}€ {fmt(totale)}
+                </p>
+                <p style={{ color: 'var(--text2)', fontSize: 12, marginTop: 2 }}>saldo totale</p>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-                {[['Casa', saldoCasa], ['Box', saldoBox], ['Cantina', saldoCantina]].map(([label, val]) => (
-                  <div key={label as string} style={{ textAlign: 'center' }}>
-                    <p style={{ color: 'var(--text2)', fontSize: 11 }}>{label}</p>
-                    <p style={{ fontSize: 14, fontWeight: 600, color: (val as number) >= 0 ? 'var(--green)' : 'var(--red)' }}>€ {fmt(val as number)}</p>
-                  </div>
-                ))}
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="btn-icon" onClick={() => openEdit(y)}><Pencil size={14} /></button>
+                <button className="btn-danger" onClick={() => del(y.id)}><Trash2 size={14} /></button>
               </div>
             </div>
-          );
-        })}
-      </div>
+            <div className="divider" />
+            <div className="grid3">
+              {[['Casa', saldoCasa], ['Box', saldoBox], ['Cantina', saldoCantina]].map(([l, v]) => (
+                <div key={l as string} style={{ textAlign: 'center', padding: '10px 6px', background: 'var(--bg2)', borderRadius: 10 }}>
+                  <p style={{ color: 'var(--text2)', fontSize: 11, fontWeight: 500, marginBottom: 4 }}>{l}</p>
+                  <p style={{ fontSize: 15, fontWeight: 700, color: (v as number) >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                    {(v as number) >= 0 ? '+' : ''}€ {fmt(v as number)}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <div className="divider" />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, fontSize: 12 }}>
+              {[['Saldo ini. casa', y.balance_start_casa], ['Saldo ini. box', y.balance_start_box], ['Saldo ini. cantina', y.balance_start_cantina],
+                ['Rate casa', y.rates_paid_casa], ['Rate box', y.rates_paid_box], ['Rate cantina', y.rates_paid_cantina]].map(([l, v]) => (
+                <div key={l as string}>
+                  <p style={{ color: 'var(--text3)', fontSize: 10, marginBottom: 2 }}>{l}</p>
+                  <p style={{ fontWeight: 500, color: (v as number) < 0 ? 'var(--red)' : 'var(--text)' }}>€ {fmt(v as number)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
