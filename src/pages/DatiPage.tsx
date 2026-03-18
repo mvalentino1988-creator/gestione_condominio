@@ -176,6 +176,127 @@ function SectionHeader({ title, sub, onAdd }: { title:string; sub?:string; onAdd
   );
 }
 
+// ── ConsumoDetail: dettaglio con tab interne ──────────────────
+function ConsumoDetail({ r, rKwh, aL, afL, rU, aU, afU, valChecks, discChecksCard }: {
+  r: any; rKwh:number|null; aL:number|null; afL:number|null;
+  rU:number|null; aU:number|null; afU:number|null;
+  valChecks: ReturnType<typeof validaLetture>[];
+  discChecksCard: ReturnType<typeof validaLetture>[];
+}) {
+  const [dt, setDt] = useState<'letture'|'costi'|'totali'>('letture');
+  const allIssues = [...valChecks, ...discChecksCard].filter(c=>!c.ok);
+  const hasIssues = allIssues.length > 0;
+
+  const tabStyle = (active: boolean, hasAlert?: boolean) => ({
+    flex:1, padding:'6px 4px', borderRadius:7, fontSize:12, fontWeight:700, whiteSpace:'nowrap' as const,
+    background: active ? '#fff' : 'transparent',
+    color: active ? (hasAlert ? '#b45309' : 'var(--accent)') : (hasAlert ? '#b45309' : 'var(--text2)'),
+    boxShadow: active ? 'var(--shadow-xs)' : 'none',
+    position:'relative' as const,
+  });
+
+  return (
+    <div style={{ marginTop:10 }}>
+      <div className="divider"/>
+      {/* Tab interne */}
+      <div style={{ display:'flex', background:'var(--bg3)', borderRadius:10, padding:3, gap:2, marginBottom:10 }}>
+        <button style={tabStyle(dt==='letture', hasIssues)} onClick={()=>setDt('letture')}>
+          Letture {hasIssues && <span style={{ display:'inline-block', width:6, height:6, background:'#f59e0b', borderRadius:'50%', marginLeft:3, verticalAlign:'middle' }}/>}
+        </button>
+        <button style={tabStyle(dt==='costi')} onClick={()=>setDt('costi')}>Costi</button>
+        <button style={tabStyle(dt==='totali')} onClick={()=>setDt('totali')}>Totali</button>
+      </div>
+
+      {/* TAB LETTURE */}
+      {dt==='letture' && (
+        <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+          {/* Alert problemi */}
+          {allIssues.length > 0 && (
+            <div style={{ background:'#fffbeb', border:'1.5px solid #f59e0b', borderRadius:9, padding:'8px 10px', display:'flex', flexDirection:'column', gap:4 }}>
+              {allIssues.map((c,i)=>(
+                <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:6, fontSize:11, color: c.severity==='error'?'#dc2626':'#92400e', fontWeight:600 }}>
+                  <AlertCircle size={11} style={{ flexShrink:0, marginTop:1 }}/>{c.msg}
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Righe letture con colore anomalia */}
+          {([
+            [r.risc_lettura_iniziale,r.risc_lettura_finale,rKwh,'Riscaldamento','cal','#ef4444',valChecks[0]],
+            [r.acqua_calda_lettura_iniziale,r.acqua_calda_lettura_finale,aL,'Acqua calda','L','#f97316',valChecks[1]],
+            [r.acqua_fredda_lettura_iniziale,r.acqua_fredda_lettura_finale,afL,'Acqua fredda','L','#3b82f6',valChecks[2]],
+          ] as [number|null,number|null,number|null,string,string,string,ReturnType<typeof validaLetture>][]).map(([ini,fin,cons,nome,unit,col,chk])=>{
+            if (ini===null && fin===null) return null;
+            const rowErr = chk && !chk.ok;
+            return (
+              <div key={nome} style={{ background: rowErr ? (chk.severity==='error'?'#fee2e2':'#fef3c7') : 'var(--bg3)', border: rowErr ? `1.5px solid ${chk.severity==='error'?'#fca5a5':'#fde68a'}` : '1px solid transparent', borderRadius:8, padding:'8px 10px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:12 }}>
+                  <span style={{ fontWeight:700, color: rowErr ? (chk.severity==='error'?'#dc2626':'#b45309') : col }}>{nome}</span>
+                  {rowErr && <AlertCircle size={12} color={chk.severity==='error'?'#dc2626':'#f59e0b'}/>}
+                </div>
+                <div style={{ display:'flex', gap:6, fontSize:11, color:'var(--text2)', marginTop:3, flexWrap:'wrap' }}>
+                  <span style={{ fontWeight: rowErr?700:400, color: rowErr?(chk.severity==='error'?'#dc2626':'#92400e'):'var(--text2)' }}>
+                    {ini!==null?ini.toLocaleString('it-IT'):'—'} → {fin!==null?fin.toLocaleString('it-IT'):'—'} {unit}
+                  </span>
+                  {cons!==null && <span style={{ fontWeight:700 }}>Δ {fmtN(cons)} {unit}</span>}
+                </div>
+              </div>
+            );
+          })}
+          {/* Discontinuità con anni adiacenti */}
+          {discChecksCard.filter(c=>!c.ok).length > 0 && (
+            <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:8, padding:'7px 10px', fontSize:11, color:'#92400e', fontWeight:600 }}>
+              <p style={{ fontWeight:700, marginBottom:3, color:'#c2410c' }}>Continuità con altri anni:</p>
+              {discChecksCard.filter(c=>!c.ok).map((c,i)=><p key={i}>• {c.msg}</p>)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB COSTI */}
+      {dt==='costi' && (
+        <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+          {([
+            ['Risc. consumo',   r.riscaldamento_consumo,   rKwh, rU, 'cal', '#ef4444'],
+            ['Risc. involont.', r.riscaldamento_involontario, null, null, '', '#94a3b8'],
+            ['ACS consumo',     r.acqua_calda_consumo,     aL,   aU, 'L',   '#f97316'],
+            ['ACS involontaria',r.acqua_calda_involontaria, null, null,'','#94a3b8'],
+            ['Acqua potabile',  r.acqua_potabile,          afL,  afU,'L',   '#3b82f6'],
+            ['Energia box',     r.energia_elettrica_box,   null, null,'','#94a3b8'],
+            ['Mov. personali',  r.movimenti_personali,     null, null,'','#94a3b8'],
+          ] as [string,number,number|null,number|null,string,string][]).map(([l,v,qty,cu,unit,col])=>(
+            <div key={l} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 8px', background:'var(--bg3)', borderRadius:7, fontSize:12 }}>
+              <span style={{ color:'var(--text2)', fontWeight:500 }}>{l}</span>
+              <div style={{ textAlign:'right' }}>
+                <span style={{ fontWeight:700 }}>€{fa(v)}</span>
+                {cu && <span style={{ fontSize:10, color:col, fontWeight:700, marginLeft:6 }}>€{f2(cu)}/{unit}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* TAB TOTALI */}
+      {dt==='totali' && (
+        <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:6 }}>
+            {([['App C63',r.totale_casa],['Box 13',r.totale_box],['Cantina',r.totale_cantina]] as [string,number][]).map(([l,v])=>(
+              <div key={l} style={{ textAlign:'center', padding:'10px 4px', background:'var(--bg3)', borderRadius:8 }}>
+                <p style={{ fontSize:10, color:'var(--text2)', fontWeight:600, marginBottom:2 }}>{l}</p>
+                <p style={{ fontSize:14, fontWeight:800 }}>€{fa(v)}</p>
+              </div>
+            ))}
+          </div>
+          <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 10px', background:'var(--accent-light)', borderRadius:8, fontSize:13 }}>
+            <span style={{ fontWeight:700 }}>Totale</span>
+            <span style={{ fontWeight:800, color:'var(--accent)' }}>€{fa(r.totale_casa+r.totale_box+r.totale_cantina)}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════
 export default function DatiPage({ property }: { property: Property }) {
   const [tab, setTab]     = useState<Tab>('Riepilogo');
@@ -709,83 +830,97 @@ export default function DatiPage({ property }: { property: Property }) {
             const afU =afL&&r.acqua_potabile?r.acqua_potabile/afL:null;
             const isExp=expC===r.id;
             const isHighlighted = highlightYears.includes(r.year_label);
+
+            // Calcola checks validazione (dentro e fuori anno)
+            const valChecks = [
+              validaLetture(r.risc_lettura_iniziale,r.risc_lettura_finale,r.riscaldamento_consumo,'Riscaldamento'),
+              validaLetture(r.acqua_calda_lettura_iniziale,r.acqua_calda_lettura_finale,r.acqua_calda_consumo,'Acqua calda'),
+              validaLetture(r.acqua_fredda_lettura_iniziale,r.acqua_fredda_lettura_finale,r.acqua_potabile,'Acqua fredda'),
+            ];
+            // Controlla discontinuità con anno precedente (anno successivo nel reverse = indice i+1)
+            const sortedC2 = [...consumi].sort((a,b)=>a.year_label.localeCompare(b.year_label));
+            const rIdx = sortedC2.findIndex(x=>x.id===r.id);
+            const nextC = rIdx < sortedC2.length-1 ? sortedC2[rIdx+1] : null;
+            const prevC2 = rIdx > 0 ? sortedC2[rIdx-1] : null;
+            const discChecksCard: ReturnType<typeof validaLetture>[] = [];
+            if (nextC) {
+              discChecksCard.push(validaContinuita(r.risc_lettura_finale, nextC.risc_lettura_iniziale, `Risc. →${nextC.year_label}`));
+              discChecksCard.push(validaContinuita(r.acqua_calda_lettura_finale, nextC.acqua_calda_lettura_iniziale, `ACS →${nextC.year_label}`));
+              discChecksCard.push(validaContinuita(r.acqua_fredda_lettura_finale, nextC.acqua_fredda_lettura_iniziale, `Acq.fr. →${nextC.year_label}`));
+            }
+            if (prevC2) {
+              discChecksCard.push(validaContinuita(prevC2.risc_lettura_finale, r.risc_lettura_iniziale, `Risc. ${prevC2.year_label}→`));
+              discChecksCard.push(validaContinuita(prevC2.acqua_calda_lettura_finale, r.acqua_calda_lettura_iniziale, `ACS ${prevC2.year_label}→`));
+              discChecksCard.push(validaContinuita(prevC2.acqua_fredda_lettura_finale, r.acqua_fredda_lettura_iniziale, `Acq.fr. ${prevC2.year_label}→`));
+            }
+            const allChecks = [...valChecks, ...discChecksCard.filter(c=>!c.ok)];
+            const hasLetture = r.risc_lettura_iniziale!==null || r.acqua_calda_lettura_iniziale!==null;
+            const hasErrors  = allChecks.some(c=>c.severity==='error');
+            const hasWarns   = allChecks.some(c=>!c.ok);
+
+            // Badge permanente stato letture
+            const statusBadge = !hasLetture ? null : hasErrors ? (
+              <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:11, fontWeight:700, color:'#dc2626', background:'#fee2e2', border:'1px solid #fecaca', borderRadius:6, padding:'2px 7px' }}>
+                <AlertCircle size={11}/> Errore letture
+              </span>
+            ) : hasWarns ? (
+              <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:11, fontWeight:700, color:'#b45309', background:'#fef3c7', border:'1px solid #fde68a', borderRadius:6, padding:'2px 7px' }}>
+                <AlertCircle size={11}/> Attenzione letture
+              </span>
+            ) : (
+              <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:11, fontWeight:600, color:'var(--green)', background:'var(--green-bg)', border:'1px solid #a7f3d0', borderRadius:6, padding:'2px 7px' }}>
+                <Check size={11}/> Letture OK
+              </span>
+            );
+
+            const cardBorder = isHighlighted
+              ? { border:'2.5px solid #f59e0b', boxShadow:'0 0 0 4px #fef3c7' }
+              : hasErrors
+                ? { border:'2px solid #fca5a5' }
+                : hasWarns
+                  ? { border:'2px solid #fde68a' }
+                  : undefined;
+
             return (
-              <div key={r.id} className="card" style={isHighlighted ? { border:'2.5px solid #f59e0b', boxShadow:'0 0 0 4px #fef3c7', transition:'box-shadow 0.3s' } : undefined}>
+              <div key={r.id} className="card" style={cardBorder}>
+                {/* Header card */}
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-                  <div>
-                    <span className="tag tag-blue" style={{ marginBottom:6, display:'inline-flex' }}>{r.year_label}</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', marginBottom:4 }}>
+                      <span className="tag tag-blue">{r.year_label}</span>
+                      {statusBadge}
+                    </div>
                     <div style={{ display:'flex', alignItems:'baseline', gap:4 }}>
-                      <p style={{ fontSize:22, fontWeight:800, fontFamily:'var(--font-display)', lineHeight:1 }}>€{f0(tot)}</p>
+                      <p style={{ fontSize:20, fontWeight:800, fontFamily:'var(--font-display)', lineHeight:1 }}>€{f0(tot)}</p>
                       <Delta cur={tot} prev={prvTot}/>
                     </div>
+                    {/* Chips consumi unitari — compatti */}
                     {rU && (
-                      <div style={{ display:'flex', gap:6, marginTop:6, flexWrap:'wrap' }}>
-                        {([[rKwh,'cal',rU,'#ef4444'],[aL,'L ACS',aU,'#f97316'],[afL,'L fred.',afU,'#3b82f6']] as [number|null,string,number|null,string][]).map(([qty,unit,cu,col])=>qty?(
-                          <span key={unit} style={{ fontSize:11, background:'var(--bg3)', borderRadius:6, padding:'2px 7px', color:'var(--text2)' }}>
-                            {fmtN(qty)} {unit} · <span style={{ fontWeight:700, color:col }}>€{f2(cu!)}/{unit.split(' ')[0]}</span>
+                      <div style={{ display:'flex', gap:5, marginTop:5, flexWrap:'wrap' }}>
+                        {([[rKwh,'cal',rU,'#ef4444'],[aL,'ACS',aU,'#f97316'],[afL,'fr.',afU,'#3b82f6']] as [number|null,string,number|null,string][]).map(([qty,unit,cu,col])=>qty?(
+                          <span key={unit} style={{ fontSize:10, background:'var(--bg3)', borderRadius:5, padding:'1px 6px', color:'var(--text2)' }}>
+                            {fmtN(qty)}{unit} · <span style={{ fontWeight:700, color:col }}>€{f2(cu!)}</span>
                           </span>
                         ):null)}
                       </div>
                     )}
                   </div>
-                  <div style={{ display:'flex', gap:5 }}>
+                  <div style={{ display:'flex', gap:4, flexShrink:0, marginLeft:8 }}>
                     <button className="btn-icon" onClick={()=>setExpC(isExp?null:r.id)}>{isExp?<ChevronUp size={13}/>:<ChevronDown size={13}/>}</button>
                     <button className="btn-icon" onClick={()=>{setEditC({...r});setIsNew(false);}}><Pencil size={13}/></button>
                     <button className="btn-danger" onClick={()=>del('consumption_data',r.id,setConsumi)}><Trash2 size={13}/></button>
                   </div>
                 </div>
-                {/* Validazione letture — visibile sempre */}
-                {(r.risc_lettura_iniziale!==null||r.acqua_calda_lettura_iniziale!==null) && (() => {
-                  const checks = [
-                    validaLetture(r.risc_lettura_iniziale,r.risc_lettura_finale,r.riscaldamento_consumo,'Riscaldamento'),
-                    validaLetture(r.acqua_calda_lettura_iniziale,r.acqua_calda_lettura_finale,r.acqua_calda_consumo,'Acqua calda'),
-                    validaLetture(r.acqua_fredda_lettura_iniziale,r.acqua_fredda_lettura_finale,r.acqua_potabile,'Acqua fredda'),
-                  ];
-                  const hasIssue = checks.some(ch=>!ch.ok);
-                  return hasIssue ? <div style={{ marginTop:10, cursor:'pointer' }} onClick={()=>setExpC(r.id)}><AlertBox checks={checks} onClickIssue={()=>setExpC(r.id)}/></div> : (
-                    <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:8, fontSize:12, color:'var(--green)', fontWeight:600 }}>
-                      <Check size={13}/> Letture coerenti
-                    </div>
+
+                {/* Dettaglio espanso con tab interne */}
+                {isExp && (() => {
+                  return (
+                    <ConsumoDetail
+                      r={r} rKwh={rKwh} aL={aL} afL={afL} rU={rU} aU={aU} afU={afU}
+                      valChecks={valChecks} discChecksCard={discChecksCard}
+                    />
                   );
                 })()}
-                {isExp && (
-                  <>
-                    <div className="divider"/>
-                    <div className="grid3">
-                      {([['App C63',r.totale_casa],['Box 13',r.totale_box],['Cantina',r.totale_cantina]] as [string,number][]).map(([l,v])=>(
-                        <div key={l} style={{ textAlign:'center', padding:'7px 4px', background:'var(--bg3)', borderRadius:8 }}>
-                          <p style={{ fontSize:10, color:'var(--text2)', fontWeight:600, marginBottom:2 }}>{l}</p>
-                          <p style={{ fontSize:13, fontWeight:800 }}>€{fa(v)}</p>
-                        </div>
-                      ))}
-                    </div>
-                    {rKwh && (
-                      <>
-                        <div className="divider"/>
-                        {([[r.risc_lettura_iniziale,r.risc_lettura_finale,rKwh,r.riscaldamento_consumo,rU,'Riscaldamento','cal','#ef4444'],[r.acqua_calda_lettura_iniziale,r.acqua_calda_lettura_finale,aL,r.acqua_calda_consumo,aU,'Acqua calda','L','#f97316'],[r.acqua_fredda_lettura_iniziale,r.acqua_fredda_lettura_finale,afL,r.acqua_potabile,afU,'Acqua fredda','L','#3b82f6']] as [number|null,number|null,number|null,number,number|null,string,string,string][]).map(([ini,fin,cons,costo,cu,nome,unit,col])=>(
-                          <div key={nome} style={{ background:'var(--bg3)', borderRadius:8, padding:'8px 10px', marginBottom:6 }}>
-                            <div style={{ display:'flex', justifyContent:'space-between', fontSize:12 }}>
-                              <span style={{ fontWeight:700, color:col }}>{nome}</span>
-                              <span style={{ fontWeight:800 }}>€{fa(costo)}</span>
-                            </div>
-                            <div style={{ display:'flex', gap:8, fontSize:11, color:'var(--text2)', marginTop:3, flexWrap:'wrap' }}>
-                              <span>{fmtN(ini)} → {fmtN(fin)} {unit}</span>
-                              <span style={{ fontWeight:700 }}>Δ {fmtN(cons)} {unit}</span>
-                              {cu && <span style={{ color:col, fontWeight:700 }}>€{f2(cu)}/{unit}</span>}
-                            </div>
-                          </div>
-                        ))}
-                      </>
-                    )}
-                    <div className="grid2" style={{ gap:6, marginTop:4 }}>
-                      {[['Risc. invo.',r.riscaldamento_involontario],['ACS invo.',r.acqua_calda_involontaria],['En. box',r.energia_elettrica_box],['Mov. pers.',r.movimenti_personali]].map(([l,v])=>(
-                        <div key={l as string} style={{ display:'flex', justifyContent:'space-between', padding:'4px 8px', background:'var(--bg3)', borderRadius:7, fontSize:12 }}>
-                          <span style={{ color:'var(--text2)' }}>{l}</span><span style={{ fontWeight:700 }}>€{fa(v as number)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
               </div>
             );
           })}
