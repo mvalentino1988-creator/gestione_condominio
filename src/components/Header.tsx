@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, Plus, Building2 } from 'lucide-react';
+import { ChevronDown, Plus, Building2, Check } from 'lucide-react';
 import type { Property } from '../types';
 
 interface Props {
@@ -14,9 +14,9 @@ export default function Header({ property, properties, onSelectProperty, onAddPr
   return (
     <>
       <header style={{
-        background: '#fff',
+        background: 'var(--bg2)',
         borderBottom: '1px solid var(--border)',
-        padding: 'calc(var(--safe-top) + 14px) 20px 14px',
+        padding: 'calc(var(--safe-top) + 13px) var(--pad) 13px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -24,60 +24,67 @@ export default function Header({ property, properties, onSelectProperty, onAddPr
         top: 0,
         zIndex: 100,
         boxShadow: '0 1px 0 var(--border)',
+        maxWidth: 'var(--max-w)',
+        margin: '0 auto',
+        width: '100%',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ background: 'var(--accent)', borderRadius: 8, padding: 6, display: 'flex' }}>
-            <Building2 size={16} color="#fff" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          <div style={{ background: 'var(--accent)', borderRadius: 9, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(22,128,60,0.35)' }}>
+            <Building2 size={17} color="#fff" strokeWidth={2.5} />
           </div>
-          <span style={{ fontFamily: 'var(--font-display)', fontSize: 19, color: 'var(--text)' }}>Condo Manager</span>
+          <div>
+            <span style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.3px' }}>Condo</span>
+            <span style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 500, color: 'var(--accent)', letterSpacing: '-0.3px' }}>Manager</span>
+          </div>
         </div>
+
         {property && (
           <button onClick={() => setOpen(true)} style={{
-            background: 'var(--bg2)',
+            background: 'var(--bg3)',
             border: '1.5px solid var(--border2)',
             color: 'var(--text)',
-            borderRadius: 10,
-            padding: '7px 12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            fontSize: 13,
-            fontFamily: 'var(--font-body)',
-            fontWeight: 500,
-            cursor: 'pointer',
-            maxWidth: 180,
+            borderRadius: 20,
+            padding: '6px 12px 6px 10px',
+            display: 'flex', alignItems: 'center', gap: 5,
+            fontSize: 13, fontWeight: 600, maxWidth: 180,
           }}>
+            <Building2 size={13} color="var(--accent)" strokeWidth={2.5} />
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{property.name}</span>
-            <ChevronDown size={14} color="var(--text2)" />
+            <ChevronDown size={13} color="var(--text3)" strokeWidth={2.5} />
           </button>
         )}
       </header>
 
       {open && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 200 }} onClick={() => setOpen(false)}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(26,31,46,0.4)', zIndex: 200, backdropFilter: 'blur(3px)' }} onClick={() => setOpen(false)}>
           <div onClick={e => e.stopPropagation()} style={{
-            position: 'absolute', top: 'calc(var(--safe-top) + 60px)', right: 20,
-            background: '#fff', border: '1px solid var(--border)', borderRadius: 14,
-            minWidth: 230, overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+            position: 'absolute', top: 'calc(var(--safe-top) + 60px)', right: 16,
+            background: '#fff', border: '1px solid var(--border)', borderRadius: 16,
+            minWidth: 230, overflow: 'hidden', boxShadow: 'var(--shadow-lg)',
+            animation: 'fadeUp 0.18s ease both',
           }}>
-            <p style={{ padding: '10px 16px 6px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text3)' }}>Le tue case</p>
+            <div style={{ padding: '10px 16px 6px' }}>
+              <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text3)' }}>Le tue case</p>
+            </div>
             {properties.map(p => (
               <button key={p.id} onClick={() => { onSelectProperty(p); setOpen(false); }} style={{
-                display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
-                padding: '11px 16px', background: p.id === property?.id ? 'var(--accent-light)' : 'transparent',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                width: '100%', padding: '11px 16px',
+                background: p.id === property?.id ? 'var(--accent-light)' : 'transparent',
                 color: p.id === property?.id ? 'var(--accent)' : 'var(--text)',
-                borderRadius: 0, fontFamily: 'var(--font-body)', fontSize: 14, fontWeight: p.id === property?.id ? 600 : 400,
+                borderRadius: 0, fontSize: 14, fontWeight: p.id === property?.id ? 700 : 500,
                 borderBottom: '1px solid var(--border)',
               }}>
-                <Building2 size={14} />
-                {p.name}
+                <span>{p.name}</span>
+                {p.id === property?.id && <Check size={14} strokeWidth={2.5} />}
               </button>
             ))}
             <button onClick={() => { onAddProperty(); setOpen(false); }} style={{
-              display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '11px 16px',
-              background: 'transparent', color: 'var(--accent)', fontFamily: 'var(--font-body)', fontSize: 14, fontWeight: 500,
+              display: 'flex', alignItems: 'center', gap: 7,
+              width: '100%', padding: '11px 16px',
+              background: 'transparent', color: 'var(--accent)', fontSize: 13, fontWeight: 600,
             }}>
-              <Plus size={14} /> Aggiungi casa
+              <Plus size={14} strokeWidth={2.5} /> Aggiungi casa
             </button>
           </div>
         </div>

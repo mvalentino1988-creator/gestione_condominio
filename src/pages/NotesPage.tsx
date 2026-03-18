@@ -37,7 +37,7 @@ export default function NotesPage({ property }: { property: Property }) {
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text2)' }}>Caricamento...</div>;
 
   return (
-    <div style={{ padding: '20px 16px' }}>
+    <div style={{ padding: '0' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 22 }}>Note</h2>
         <button className="btn-primary" onClick={openNew} style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Plus size={15} /> Nuova nota</button>
