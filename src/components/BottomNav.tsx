@@ -1,10 +1,11 @@
 import { LayoutDashboard, Database, StickyNote } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { Page } from '../App';
 
-const items = [
-  { id: 'dashboard' as Page, label: 'Home',  icon: LayoutDashboard },
-  { id: 'dati'      as Page, label: 'Dati',  icon: Database        },
-  { id: 'note'      as Page, label: 'Note',  icon: StickyNote      },
+const items: { id: Page; label: string; icon: LucideIcon }[] = [
+  { id: 'dashboard', label: 'Home',  icon: LayoutDashboard },
+  { id: 'dati',      label: 'Dati',  icon: Database        },
+  { id: 'note',      label: 'Note',  icon: StickyNote      },
 ];
 
 export default function BottomNav({ page, setPage }: { page: Page; setPage: (p: Page) => void }) {
