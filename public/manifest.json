@@ -1,6 +1,6 @@
 {
-  "name": "Condo Manager",
-  "short_name": "Condo",
+  "name": "Gestione Casa",
+  "short_name": "Gestione Casa",
   "description": "Gestione spese condominiali",
   "start_url": "/",
   "scope": "/",

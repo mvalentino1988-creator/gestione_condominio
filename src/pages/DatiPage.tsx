@@ -193,6 +193,8 @@ export default function DatiPage({ property }: { property: Property }) {
   const [expF,    setExpF]    = useState<string|null>(null);
   const [expC,    setExpC]    = useState<string|null>(null);
   const [cMode,   setCMode]   = useState<'spese'|'saldo'|'consumi'|'var'>('spese');
+  const [highlightYears, setHighlightYears] = useState<string[]>([]);
+  const consumiTopRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     const [a,b,c,d] = await Promise.all([
@@ -350,6 +352,11 @@ export default function DatiPage({ property }: { property: Property }) {
               checks.push(validaContinuita(pC.acqua_fredda_lettura_finale, cC.acqua_fredda_lettura_iniziale, `Acq.fr. ${prv.anno}→${cur.anno}`));
             }
             const issues = checks.filter(ch => !ch.ok);
+            // Collect the affected year pairs from issue messages
+            const affectedYears = issues.flatMap(ch => {
+              const m = ch.msg.match(/(\d{2}\/\d{2})/g);
+              return m || [];
+            });
             if (checks.length === 0) return null;
             return (
               <div>
@@ -359,7 +366,14 @@ export default function DatiPage({ property }: { property: Property }) {
                     <Check size={15}/> Tutte le letture sono continue tra gli anni
                   </div>
                 ) : (
-                  <AlertBox checks={issues} onClickIssue={() => setTab('Consumi')}/>
+                  <AlertBox checks={issues} onClickIssue={() => {
+                    setHighlightYears(affectedYears);
+                    setTab('Consumi');
+                    setTimeout(() => {
+                      consumiTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      setTimeout(() => setHighlightYears([]), 3500);
+                    }, 100);
+                  }}/>
                 )}
               </div>
             );
@@ -578,8 +592,31 @@ export default function DatiPage({ property }: { property: Property }) {
 
       {/* ══ CONSUMI ══ */}
       {tab==='Consumi' && (
-        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+        <div ref={consumiTopRef} style={{ display:'flex', flexDirection:'column', gap:12 }}>
           <SectionHeader title="Dati Consumi" sub="Letture contatori e costi" onAdd={()=>{setEditC({...emptyC});setIsNew(true);}}/>
+          {/* Banner discontinuità tra anni */}
+          {(() => {
+            const sortedC = [...consumi].sort((a,b)=>a.year_label.localeCompare(b.year_label));
+            const discChecks: { msg: string; anni: string[] }[] = [];
+            for (let i = 1; i < sortedC.length; i++) {
+              const prv = sortedC[i-1], cur = sortedC[i];
+              [['risc_lettura_finale','risc_lettura_iniziale','Risc.'],['acqua_calda_lettura_finale','acqua_calda_lettura_iniziale','ACS'],['acqua_fredda_lettura_finale','acqua_fredda_lettura_iniziale','Acq.fr.']].forEach(([kF,kI,nome])=>{
+                const vF = (prv as any)[kF], vI = (cur as any)[kI];
+                if (vF!==null && vI!==null && vF!==vI) {
+                  discChecks.push({ msg: `${nome}: finale ${prv.year_label} (${(vF as number).toLocaleString('it-IT')}) ≠ iniziale ${cur.year_label} (${(vI as number).toLocaleString('it-IT')}) — diff. ${Math.abs(vF-vI).toLocaleString('it-IT')}`, anni: [prv.year_label, cur.year_label] });
+                }
+              });
+            }
+            if (discChecks.length === 0) return null;
+            return (
+              <div style={{ background:'#fffbeb', border:'2px solid #f59e0b', borderRadius:12, padding:'12px 14px', display:'flex', flexDirection:'column', gap:6 }}>
+                <p style={{ fontWeight:800, fontSize:13, color:'#b45309', marginBottom:2, display:'flex', alignItems:'center', gap:6 }}><AlertCircle size={15}/> Discontinuità tra anni — correggere le letture evidenziate</p>
+                {discChecks.map((d,i)=>(
+                  <div key={i} style={{ fontSize:12, color:'#92400e', background:'#fef3c7', borderRadius:8, padding:'6px 10px', fontWeight:600 }}>• {d.msg}</div>
+                ))}
+              </div>
+            );
+          })()}
           <div style={{ background:'var(--blue-bg)', border:'1px solid #bfdbfe', borderRadius:10, padding:'10px 12px', fontSize:12, color:'var(--blue)' }}>
             Inserisci <strong>una volta l'anno</strong> dalla "Tabella Consumi" e dal "Riparto Consuntivo" SSA.
           </div>
@@ -671,8 +708,9 @@ export default function DatiPage({ property }: { property: Property }) {
             const aU  =aL&&r.acqua_calda_consumo?r.acqua_calda_consumo/aL:null;
             const afU =afL&&r.acqua_potabile?r.acqua_potabile/afL:null;
             const isExp=expC===r.id;
+            const isHighlighted = highlightYears.includes(r.year_label);
             return (
-              <div key={r.id} className="card">
+              <div key={r.id} className="card" style={isHighlighted ? { border:'2.5px solid #f59e0b', boxShadow:'0 0 0 4px #fef3c7', transition:'box-shadow 0.3s' } : undefined}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
                   <div>
                     <span className="tag tag-blue" style={{ marginBottom:6, display:'inline-flex' }}>{r.year_label}</span>
