@@ -492,8 +492,8 @@ export default function DatiPage({ property }: { property: Property }) {
                               {prv?.sf!=null && (
                                 <div>
                                   <button onClick={()=>openPct('Spese fisse',r.anno,r.sf!,prv.anno,prv.sf!)}
-                                    style={{ fontSize:9, fontWeight:700, color:r.sf>prv.sf!'var(--red)':'var(--green)', background:'transparent', border:'none', cursor:'pointer', padding:0, textDecoration:'underline dotted' }}>
-                                    {r.sf>prv.sf!'▲':'▼'}{Math.abs(pct(r.sf!,prv.sf!)).toFixed(1)}%
+                                    style={{ fontSize:9, fontWeight:700, color:r.sf>prv.sf! ? 'var(--red)' : 'var(--green)', background:'transparent', border:'none', cursor:'pointer', padding:0, textDecoration:'underline dotted' }}>
+                                    {r.sf>prv.sf! ? '▲' : '▼'}{Math.abs(pct(r.sf!,prv.sf!)).toFixed(1)}%
                                   </button>
                                 </div>
                               )}
@@ -508,8 +508,8 @@ export default function DatiPage({ property }: { property: Property }) {
                               {prv?.con!=null && (
                                 <div>
                                   <button onClick={()=>openPct('Consumi',r.anno,r.con!,prv.anno,prv.con!)}
-                                    style={{ fontSize:9, fontWeight:700, color:r.con>prv.con!'var(--red)':'var(--green)', background:'transparent', border:'none', cursor:'pointer', padding:0, textDecoration:'underline dotted' }}>
-                                    {r.con>prv.con!'▲':'▼'}{Math.abs(pct(r.con!,prv.con!)).toFixed(1)}%
+                                    style={{ fontSize:9, fontWeight:700, color:r.con>prv.con! ? 'var(--red)' : 'var(--green)', background:'transparent', border:'none', cursor:'pointer', padding:0, textDecoration:'underline dotted' }}>
+                                    {r.con>prv.con! ? '▲' : '▼'}{Math.abs(pct(r.con!,prv.con!)).toFixed(1)}%
                                   </button>
                                 </div>
                               )}
@@ -524,8 +524,8 @@ export default function DatiPage({ property }: { property: Property }) {
                               {prv?.tot!=null && (
                                 <div>
                                   <button onClick={()=>openPct('Totale spese',r.anno,r.tot!,prv.anno,prv.tot!)}
-                                    style={{ fontSize:9, fontWeight:700, color:r.tot>prv.tot!'var(--red)':'var(--green)', background:'transparent', border:'none', cursor:'pointer', padding:0, textDecoration:'underline dotted' }}>
-                                    {r.tot>prv.tot!'▲':'▼'}{Math.abs(pct(r.tot!,prv.tot!)).toFixed(1)}%
+                                    style={{ fontSize:9, fontWeight:700, color:r.tot>prv.tot! ? 'var(--red)' : 'var(--green)', background:'transparent', border:'none', cursor:'pointer', padding:0, textDecoration:'underline dotted' }}>
+                                    {r.tot>prv.tot! ? '▲' : '▼'}{Math.abs(pct(r.tot!,prv.tot!)).toFixed(1)}%
                                   </button>
                                 </div>
                               )}
