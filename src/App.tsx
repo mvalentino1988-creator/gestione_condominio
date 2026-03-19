@@ -37,6 +37,8 @@ export default function App() {
     setShowModal(false);
   };
 
+  const goHome = () => setPage('dashboard');
+
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg)' }}>
       <div style={{ width: 34, height: 34, borderRadius: '50%', border: '3px solid var(--border2)', borderTopColor: 'var(--accent)', animation: 'spin 0.7s linear infinite' }} />
@@ -46,9 +48,15 @@ export default function App() {
 
   return (
     <>
-      {/* Fixed header — max-width handled inside Header */}
+      {/* Fixed header */}
       <div style={{ position: 'sticky', top: 0, zIndex: 100, background: 'var(--bg2)', borderBottom: '1px solid var(--border)' }}>
-        <Header property={selectedProperty} properties={properties} onSelectProperty={setSelectedProperty} onAddProperty={() => setShowModal(true)} />
+        <Header
+          property={selectedProperty}
+          properties={properties}
+          onSelectProperty={setSelectedProperty}
+          onAddProperty={() => setShowModal(true)}
+          onGoHome={goHome}
+        />
       </div>
 
       <main style={{ paddingBottom: NAV_H, minHeight: '100vh', background: 'var(--bg)' }}>
@@ -74,7 +82,7 @@ export default function App() {
   );
 }
 
-function PropertyModal({ onSave, onClose, canClose }: { onSave:(n:string,a:string)=>void; onClose:()=>void; canClose:boolean }) {
+function PropertyModal({ onSave, onClose, canClose }: { onSave: (n: string, a: string) => void; onClose: () => void; canClose: boolean }) {
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   return (
