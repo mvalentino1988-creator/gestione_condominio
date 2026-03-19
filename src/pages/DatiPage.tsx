@@ -309,7 +309,6 @@ function SezioneStorico({ propertyId, years, fixed, consumi, onRefresh }: {
         scale_prop_box: 0, scala_c_box: 0, asc_c_box: 0, prop_box_extra: 0,
         prop_cantina: 0, gen_prop_cantina: 0, man_ord_cantina: 0,
         scale_prop_cantina: 0, scala_c_cantina: 0, asc_c_cantina: 0,
-        addebiti_unita_imm: 0,
       });
     }
 
