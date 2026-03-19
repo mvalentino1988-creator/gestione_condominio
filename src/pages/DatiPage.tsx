@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import type { Property, ExerciseYear, FixedExpenses, ConsumptionData } from '../types';
 import {
   Plus, Pencil, Trash2, X, Check, TrendingUp, TrendingDown,
-  ChevronDown, ChevronUp, CreditCard, AlertCircle, Layers
+  ChevronDown, ChevronUp, CreditCard, AlertCircle, Layers, ArrowUpDown
 } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
@@ -39,7 +39,25 @@ const PV = {
 const TABS = ['Riepilogo','Rendiconto','Spese','Consumi','Rate','Confronto','Preventivo'] as const;
 type Tab = typeof TABS[number];
 
-// ── PctModal — mostra il dettaglio del calcolo % ──────────────
+// ── SortToggle ────────────────────────────────────────────────
+function SortToggle({ sortAsc, onToggle }: { sortAsc: boolean; onToggle: () => void }) {
+  return (
+    <button
+      onClick={onToggle}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        background: 'var(--bg3)', border: '1px solid var(--border)',
+        borderRadius: 20, padding: '5px 11px', fontSize: 11, fontWeight: 600,
+        color: 'var(--text2)', cursor: 'pointer',
+      }}
+    >
+      <ArrowUpDown size={11} />
+      {sortAsc ? 'Dal più vecchio' : 'Dal più recente'}
+    </button>
+  );
+}
+
+// ── PctModal ──────────────────────────────────────────────────
 type PctModalData = { title: string; curLabel: string; curVal: number; prevLabel: string; prevVal: number; pct: number };
 
 function PctModal({ title, curLabel, curVal, prevLabel, prevVal, pct: pctVal, onClose }: PctModalData & { onClose: () => void }) {
@@ -356,9 +374,14 @@ export default function DatiPage({ property }: { property: Property }) {
   const [showBreakdownS, setShowBreakdownS] = useState(false);
   const [showBreakdownC, setShowBreakdownC] = useState(false);
   const [consumiView, setConsumiView] = useState<'euro'|'qty'>('euro');
-  const [highlightYears, setHighlightYears] = useState<string[]>([]);
   const [pctModal, setPctModal] = useState<PctModalData | null>(null);
   const consumiTopRef = useRef<HTMLDivElement>(null);
+
+  // ── Sort states ───────────────────────────────────────────
+  const [sortYearsAsc,   setSortYearsAsc]   = useState(false);
+  const [sortFixedAsc,   setSortFixedAsc]   = useState(false);
+  const [sortConsumiAsc, setSortConsumiAsc] = useState(false);
+  const [sortRatesAsc,   setSortRatesAsc]   = useState(false);
 
   const load = useCallback(async () => {
     const [a,b,c,d] = await Promise.all([
@@ -440,11 +463,27 @@ export default function DatiPage({ property }: { property: Property }) {
   const emptyC = { property_id:property.id, year_label:'', acqua_potabile:0, riscaldamento_involontario:0, riscaldamento_consumo:0, acqua_calda_involontaria:0, acqua_calda_consumo:0, energia_elettrica_box:0, movimenti_personali:0, risc_lettura_iniziale:null, risc_lettura_finale:null, acqua_calda_lettura_iniziale:null, acqua_calda_lettura_finale:null, acqua_fredda_lettura_iniziale:null, acqua_fredda_lettura_finale:null, totale_casa:0, totale_box:0, totale_cantina:0 };
   const emptyR = { property_id:property.id, year_label:years[years.length-1]?.year_label||'', numero_rata:'', data_pagamento:new Date().toISOString().split('T')[0], importo_casa:0, importo_box:0, importo_cantina:0, descrizione:'' };
 
-  // helper per aprire il modal %
   const openPct = (title: string, curLabel: string, curVal: number, prevLabel: string, prevVal: number) => {
     const pctVal = prevVal !== 0 ? (curVal - prevVal) / Math.abs(prevVal) * 100 : 0;
     setPctModal({ title, curLabel, curVal, prevLabel, prevVal, pct: pctVal });
   };
+
+  // ── Sorted lists ─────────────────────────────────────────
+  const sortedYears  = [...years].sort((a,b) => sortYearsAsc
+    ? a.year_label.localeCompare(b.year_label)
+    : b.year_label.localeCompare(a.year_label));
+
+  const sortedFixed  = [...fixed].sort((a,b) => sortFixedAsc
+    ? a.year_label.localeCompare(b.year_label)
+    : b.year_label.localeCompare(a.year_label));
+
+  const sortedConsumi = [...consumi].sort((a,b) => sortConsumiAsc
+    ? a.year_label.localeCompare(b.year_label)
+    : b.year_label.localeCompare(a.year_label));
+
+  const sortedAllYrs = [...allYrs].sort((a,b) => sortRatesAsc
+    ? a.localeCompare(b)
+    : b.localeCompare(a));
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
@@ -458,7 +497,6 @@ export default function DatiPage({ property }: { property: Property }) {
             <ToggleBreakdown show={showBreakdownR} onToggle={()=>setShowBreakdownR(v=>!v)}/>
           </div>
 
-          {/* Tabella riepilogo */}
           <div style={{ background:'#fff', border:'1px solid var(--border)', borderRadius:14, overflow:'hidden' }}>
             <div style={{ overflowX:'auto' }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
@@ -484,55 +522,15 @@ export default function DatiPage({ property }: { property: Property }) {
                     return (
                       <tr key={r.anno} style={{ borderBottom:'1px solid var(--border)', background:i%2===0?'#fff':'var(--bg3)' }}>
                         <td style={{ padding:'8px 10px' }}><span className="tag tag-blue">{r.anno}</span></td>
-                        {/* Spese fisse */}
                         <td style={{ padding:'8px 10px', textAlign:'right' }}>
-                          {r.sf!=null ? (
-                            <>
-                              <span style={{ fontWeight:700 }}>€{f0(r.sf)}</span>
-                              {prv?.sf!=null && (
-                                <div>
-                                  <button onClick={()=>openPct('Spese fisse',r.anno,r.sf!,prv.anno,prv.sf!)}
-                                    style={{ fontSize:9, fontWeight:700, color:r.sf>prv.sf! ? 'var(--red)' : 'var(--green)', background:'transparent', border:'none', cursor:'pointer', padding:0, textDecoration:'underline dotted' }}>
-                                    {r.sf>prv.sf! ? '▲' : '▼'}{Math.abs(pct(r.sf!,prv.sf!)).toFixed(1)}%
-                                  </button>
-                                </div>
-                              )}
-                            </>
-                          ) : <span style={{ color:'var(--text3)' }}>—</span>}
+                          {r.sf!=null ? (<><span style={{ fontWeight:700 }}>€{f0(r.sf)}</span>{prv?.sf!=null && (<div><button onClick={()=>openPct('Spese fisse',r.anno,r.sf!,prv.anno,prv.sf!)} style={{ fontSize:9, fontWeight:700, color:r.sf>prv.sf! ? 'var(--red)' : 'var(--green)', background:'transparent', border:'none', cursor:'pointer', padding:0, textDecoration:'underline dotted' }}>{r.sf>prv.sf! ? '▲' : '▼'}{Math.abs(pct(r.sf!,prv.sf!)).toFixed(1)}%</button></div>)}</>) : <span style={{ color:'var(--text3)' }}>—</span>}
                         </td>
-                        {/* Consumi */}
                         <td style={{ padding:'8px 10px', textAlign:'right' }}>
-                          {r.con!=null ? (
-                            <>
-                              <span style={{ fontWeight:700 }}>€{f0(r.con)}</span>
-                              {prv?.con!=null && (
-                                <div>
-                                  <button onClick={()=>openPct('Consumi',r.anno,r.con!,prv.anno,prv.con!)}
-                                    style={{ fontSize:9, fontWeight:700, color:r.con>prv.con! ? 'var(--red)' : 'var(--green)', background:'transparent', border:'none', cursor:'pointer', padding:0, textDecoration:'underline dotted' }}>
-                                    {r.con>prv.con! ? '▲' : '▼'}{Math.abs(pct(r.con!,prv.con!)).toFixed(1)}%
-                                  </button>
-                                </div>
-                              )}
-                            </>
-                          ) : <span style={{ color:'var(--text3)' }}>—</span>}
+                          {r.con!=null ? (<><span style={{ fontWeight:700 }}>€{f0(r.con)}</span>{prv?.con!=null && (<div><button onClick={()=>openPct('Consumi',r.anno,r.con!,prv.anno,prv.con!)} style={{ fontSize:9, fontWeight:700, color:r.con>prv.con! ? 'var(--red)' : 'var(--green)', background:'transparent', border:'none', cursor:'pointer', padding:0, textDecoration:'underline dotted' }}>{r.con>prv.con! ? '▲' : '▼'}{Math.abs(pct(r.con!,prv.con!)).toFixed(1)}%</button></div>)}</>) : <span style={{ color:'var(--text3)' }}>—</span>}
                         </td>
-                        {/* Tot spese */}
                         <td style={{ padding:'8px 10px', textAlign:'right' }}>
-                          {r.tot!=null ? (
-                            <>
-                              <span style={{ fontWeight:800 }}>€{f0(r.tot)}</span>
-                              {prv?.tot!=null && (
-                                <div>
-                                  <button onClick={()=>openPct('Totale spese',r.anno,r.tot!,prv.anno,prv.tot!)}
-                                    style={{ fontSize:9, fontWeight:700, color:r.tot>prv.tot! ? 'var(--red)' : 'var(--green)', background:'transparent', border:'none', cursor:'pointer', padding:0, textDecoration:'underline dotted' }}>
-                                    {r.tot>prv.tot! ? '▲' : '▼'}{Math.abs(pct(r.tot!,prv.tot!)).toFixed(1)}%
-                                  </button>
-                                </div>
-                              )}
-                            </>
-                          ) : <span style={{ color:'var(--text3)' }}>—</span>}
+                          {r.tot!=null ? (<><span style={{ fontWeight:800 }}>€{f0(r.tot)}</span>{prv?.tot!=null && (<div><button onClick={()=>openPct('Totale spese',r.anno,r.tot!,prv.anno,prv.tot!)} style={{ fontSize:9, fontWeight:700, color:r.tot>prv.tot! ? 'var(--red)' : 'var(--green)', background:'transparent', border:'none', cursor:'pointer', padding:0, textDecoration:'underline dotted' }}>{r.tot>prv.tot! ? '▲' : '▼'}{Math.abs(pct(r.tot!,prv.tot!)).toFixed(1)}%</button></div>)}</>) : <span style={{ color:'var(--text3)' }}>—</span>}
                         </td>
-                        {/* Rate versate */}
                         <td style={{ padding:'8px 10px', textAlign:'right' }}>
                           <span style={{ fontWeight:700, color:'var(--accent)' }}>{r.rateAnno>0?`€${f0(r.rateAnno)}`:'—'}</span>
                           {r.rateCount>0&&<div style={{ fontSize:9, color:'var(--text3)' }}>{r.rateCount} {pluraleRate(r.rateCount)}</div>}
@@ -542,13 +540,11 @@ export default function DatiPage({ property }: { property: Property }) {
                             {totSaldo!=null?<span style={{ fontWeight:800, color:totSaldo>=0?'var(--green)':'var(--red)' }}>{totSaldo>=0?'+':'-'}€{f0(totSaldo)}</span>:<span style={{ color:'var(--text3)' }}>—</span>}
                           </td>
                         )}
-                        {showBreakdownR && <>
-                          {[r.sC,r.sB,r.sCa].map((v,j)=>(
-                            <td key={j} style={{ padding:'8px 10px', textAlign:'right' }}>
-                              {v!=null?<span style={{ fontWeight:700, color:v>=0?'var(--green)':'var(--red)' }}>{v>=0?'+':'-'}€{f0(v)}</span>:<span style={{ color:'var(--text3)' }}>—</span>}
-                            </td>
-                          ))}
-                        </>}
+                        {showBreakdownR && <>{[r.sC,r.sB,r.sCa].map((v,j)=>(
+                          <td key={j} style={{ padding:'8px 10px', textAlign:'right' }}>
+                            {v!=null?<span style={{ fontWeight:700, color:v>=0?'var(--green)':'var(--red)' }}>{v>=0?'+':'-'}€{f0(v)}</span>:<span style={{ color:'var(--text3)' }}>—</span>}
+                          </td>
+                        ))}</>}
                       </tr>
                     );
                   })}
@@ -557,7 +553,6 @@ export default function DatiPage({ property }: { property: Property }) {
             </div>
           </div>
 
-          {/* Grafico spese totali */}
           <div className="card" style={{ padding:'16px' }}>
             <p style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>Andamento spese totali</p>
             <ResponsiveContainer width="100%" height={130}>
@@ -571,7 +566,6 @@ export default function DatiPage({ property }: { property: Property }) {
             </ResponsiveContainer>
           </div>
 
-          {/* Variazioni % anno su anno — cliccabili */}
           {vData.length > 0 && (
             <div className="card">
               <p style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>Variazioni anno su anno</p>
@@ -584,14 +578,8 @@ export default function DatiPage({ property }: { property: Property }) {
                     <div key={r.anno} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'var(--bg2)', borderRadius:8, fontSize:12, flexWrap:'wrap' }}>
                       <span className="tag tag-blue" style={{ flexShrink:0 }}>{r.anno}</span>
                       {([['Fisse', r['Fisse%'], 'Spese fisse'] as const, ['Consumi', r['Consumi%'], 'Consumi'] as const, ['Totale', r['Totale%'], 'Totale'] as const]).map(([l, v, field]) => (
-                        <button key={l}
-                          onClick={() => openPct(`${field} — ${r.prevAnno} → ${r.anno}`, r.anno, curCData[field], r.prevAnno, prvCData[field])}
-                          style={{
-                            fontWeight:700, color:(v)>0?'var(--red)':'var(--green)',
-                            background:(v)>0?'var(--red-bg)':'var(--green-bg)',
-                            borderRadius:5, padding:'2px 8px', fontSize:11, border:'none', cursor:'pointer',
-                            textDecoration:'underline dotted',
-                          }}>
+                        <button key={l} onClick={() => openPct(`${field} — ${r.prevAnno} → ${r.anno}`, r.anno, curCData[field], r.prevAnno, prvCData[field])}
+                          style={{ fontWeight:700, color:(v)>0?'var(--red)':'var(--green)', background:(v)>0?'var(--red-bg)':'var(--green-bg)', borderRadius:5, padding:'2px 8px', fontSize:11, border:'none', cursor:'pointer', textDecoration:'underline dotted' }}>
                           {l}: {(v)>0?'+':''}{(v).toFixed(1)}%
                         </button>
                       ))}
@@ -602,7 +590,6 @@ export default function DatiPage({ property }: { property: Property }) {
             </div>
           )}
 
-          {/* Costi unitari consumi nel tempo */}
           {riassunto.some(r=>r.rUnit) && (
             <div style={{ background:'#fff', border:'1px solid var(--border)', borderRadius:14, overflow:'hidden' }}>
               <div style={{ padding:'10px 14px 8px', borderBottom:'1px solid var(--border)', background:'var(--bg3)' }}>
@@ -624,35 +611,11 @@ export default function DatiPage({ property }: { property: Property }) {
                         <tr key={r.anno} style={{ borderBottom:'1px solid var(--border)' }}>
                           <td style={{ padding:'6px 10px' }}><span className="tag tag-blue">{r.anno}</span></td>
                           <td style={{ padding:'6px 10px', textAlign:'right', fontWeight:600 }}>{fN(r.rKwh)}</td>
-                          <td style={{ padding:'6px 10px', textAlign:'right' }}>
-                            <span style={{ fontWeight:700, color:'#ef4444' }}>{r.rUnit?f2(r.rUnit):'—'}</span>
-                            {prv?.rUnit&&r.rUnit&&(
-                              <button onClick={()=>openPct('Costo unitario riscaldamento',r.anno,r.rUnit!,prv.anno,prv.rUnit!)}
-                                style={{ display:'block', fontSize:9, color:r.rUnit>prv.rUnit?'var(--red)':'var(--green)', fontWeight:700, background:'transparent', border:'none', cursor:'pointer', padding:0, textDecoration:'underline dotted' }}>
-                                {r.rUnit>prv.rUnit?'▲':'▼'}{Math.abs(pct(r.rUnit,prv.rUnit)).toFixed(1)}%
-                              </button>
-                            )}
-                          </td>
+                          <td style={{ padding:'6px 10px', textAlign:'right' }}><span style={{ fontWeight:700, color:'#ef4444' }}>{r.rUnit?f2(r.rUnit):'—'}</span>{prv?.rUnit&&r.rUnit&&(<button onClick={()=>openPct('Costo unitario riscaldamento',r.anno,r.rUnit!,prv.anno,prv.rUnit!)} style={{ display:'block', fontSize:9, color:r.rUnit>prv.rUnit?'var(--red)':'var(--green)', fontWeight:700, background:'transparent', border:'none', cursor:'pointer', padding:0, textDecoration:'underline dotted' }}>{r.rUnit>prv.rUnit?'▲':'▼'}{Math.abs(pct(r.rUnit,prv.rUnit)).toFixed(1)}%</button>)}</td>
                           <td style={{ padding:'6px 10px', textAlign:'right', fontWeight:600 }}>{fN(r.aL)}</td>
-                          <td style={{ padding:'6px 10px', textAlign:'right' }}>
-                            <span style={{ fontWeight:700, color:'#f97316' }}>{r.aUnit?f2(r.aUnit):'—'}</span>
-                            {prv?.aUnit&&r.aUnit&&(
-                              <button onClick={()=>openPct('Costo unitario ACS',r.anno,r.aUnit!,prv.anno,prv.aUnit!)}
-                                style={{ display:'block', fontSize:9, color:r.aUnit>prv.aUnit?'var(--red)':'var(--green)', fontWeight:700, background:'transparent', border:'none', cursor:'pointer', padding:0, textDecoration:'underline dotted' }}>
-                                {r.aUnit>prv.aUnit?'▲':'▼'}{Math.abs(pct(r.aUnit,prv.aUnit)).toFixed(1)}%
-                              </button>
-                            )}
-                          </td>
+                          <td style={{ padding:'6px 10px', textAlign:'right' }}><span style={{ fontWeight:700, color:'#f97316' }}>{r.aUnit?f2(r.aUnit):'—'}</span>{prv?.aUnit&&r.aUnit&&(<button onClick={()=>openPct('Costo unitario ACS',r.anno,r.aUnit!,prv.anno,prv.aUnit!)} style={{ display:'block', fontSize:9, color:r.aUnit>prv.aUnit?'var(--red)':'var(--green)', fontWeight:700, background:'transparent', border:'none', cursor:'pointer', padding:0, textDecoration:'underline dotted' }}>{r.aUnit>prv.aUnit?'▲':'▼'}{Math.abs(pct(r.aUnit,prv.aUnit)).toFixed(1)}%</button>)}</td>
                           <td style={{ padding:'6px 10px', textAlign:'right', fontWeight:600 }}>{fN(r.afL)}</td>
-                          <td style={{ padding:'6px 10px', textAlign:'right' }}>
-                            <span style={{ fontWeight:700, color:'#3b82f6' }}>{r.afUnit?f2(r.afUnit):'—'}</span>
-                            {prv?.afUnit&&r.afUnit&&(
-                              <button onClick={()=>openPct('Costo unitario acqua fredda',r.anno,r.afUnit!,prv.anno,prv.afUnit!)}
-                                style={{ display:'block', fontSize:9, color:r.afUnit>prv.afUnit?'var(--red)':'var(--green)', fontWeight:700, background:'transparent', border:'none', cursor:'pointer', padding:0, textDecoration:'underline dotted' }}>
-                                {r.afUnit>prv.afUnit?'▲':'▼'}{Math.abs(pct(r.afUnit,prv.afUnit)).toFixed(1)}%
-                              </button>
-                            )}
-                          </td>
+                          <td style={{ padding:'6px 10px', textAlign:'right' }}><span style={{ fontWeight:700, color:'#3b82f6' }}>{r.afUnit?f2(r.afUnit):'—'}</span>{prv?.afUnit&&r.afUnit&&(<button onClick={()=>openPct('Costo unitario acqua fredda',r.anno,r.afUnit!,prv.anno,prv.afUnit!)} style={{ display:'block', fontSize:9, color:r.afUnit>prv.afUnit?'var(--red)':'var(--green)', fontWeight:700, background:'transparent', border:'none', cursor:'pointer', padding:0, textDecoration:'underline dotted' }}>{r.afUnit>prv.afUnit?'▲':'▼'}{Math.abs(pct(r.afUnit,prv.afUnit)).toFixed(1)}%</button>)}</td>
                         </tr>
                       );
                     })}
@@ -667,7 +630,10 @@ export default function DatiPage({ property }: { property: Property }) {
       {/* ══ RENDICONTO ══ */}
       {tab==='Rendiconto' && (
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-          <SectionHeader title="Rendiconto annuale" sub="Saldo = Inizio + Rate − Spese" onAdd={()=>{setEditY({...emptyY});setIsNew(true);}}/>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8, flexWrap:'wrap' }}>
+            <SectionHeader title="Rendiconto annuale" sub="Saldo = Inizio + Rate − Spese" onAdd={()=>{setEditY({...emptyY});setIsNew(true);}}/>
+            {years.length > 1 && <SortToggle sortAsc={sortYearsAsc} onToggle={()=>setSortYearsAsc(v=>!v)}/>}
+          </div>
           <div style={{ background:'var(--blue-bg)', border:'1px solid #bfdbfe', borderRadius:10, padding:'10px 12px', fontSize:12, color:'var(--blue)' }}>
             Inserisci i dati <strong>una volta l'anno</strong> quando ricevi il rendiconto SSA (ottobre/novembre).
           </div>
@@ -678,33 +644,21 @@ export default function DatiPage({ property }: { property: Property }) {
                 <div><label>Anno esercizio</label><input value={editY.year_label||''} onChange={e=>setEditY((p:any)=>({...p,year_label:e.target.value}))} placeholder="es. 25/26"/></div>
                 <div style={{ background:'var(--bg3)', borderRadius:10, padding:12 }}>
                   <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', marginBottom:8 }}>Saldo iniziale</p>
-                  <div className="grid3">
-                    <NF lbl="App C63" fld="balance_start_casa" st={editY} fn={numY}/>
-                    <NF lbl="Box 13"  fld="balance_start_box"  st={editY} fn={numY}/>
-                    <NF lbl="Cantina" fld="balance_start_cantina" st={editY} fn={numY}/>
-                  </div>
+                  <div className="grid3"><NF lbl="App C63" fld="balance_start_casa" st={editY} fn={numY}/><NF lbl="Box 13" fld="balance_start_box" st={editY} fn={numY}/><NF lbl="Cantina" fld="balance_start_cantina" st={editY} fn={numY}/></div>
                 </div>
                 <div style={{ background:'var(--bg3)', borderRadius:10, padding:12 }}>
                   <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', marginBottom:8 }}>Rate versate</p>
-                  <div className="grid3">
-                    <NF lbl="App C63" fld="rates_paid_casa" st={editY} fn={numY}/>
-                    <NF lbl="Box 13"  fld="rates_paid_box"  st={editY} fn={numY}/>
-                    <NF lbl="Cantina" fld="rates_paid_cantina" st={editY} fn={numY}/>
-                  </div>
+                  <div className="grid3"><NF lbl="App C63" fld="rates_paid_casa" st={editY} fn={numY}/><NF lbl="Box 13" fld="rates_paid_box" st={editY} fn={numY}/><NF lbl="Cantina" fld="rates_paid_cantina" st={editY} fn={numY}/></div>
                 </div>
                 <div style={{ background:'var(--bg3)', borderRadius:10, padding:12 }}>
                   <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', marginBottom:8 }}>Spese totali (Totale gestione dal riparto)</p>
-                  <div className="grid3">
-                    <NF lbl="App C63" fld="spese_totali_casa" st={editY} fn={numY}/>
-                    <NF lbl="Box 13"  fld="spese_totali_box"  st={editY} fn={numY}/>
-                    <NF lbl="Cantina" fld="spese_totali_cantina" st={editY} fn={numY}/>
-                  </div>
+                  <div className="grid3"><NF lbl="App C63" fld="spese_totali_casa" st={editY} fn={numY}/><NF lbl="Box 13" fld="spese_totali_box" st={editY} fn={numY}/><NF lbl="Cantina" fld="spese_totali_cantina" st={editY} fn={numY}/></div>
                 </div>
                 <FormActions onCancel={()=>setEditY(null)} onSave={async()=>{await save('exercise_years',editY,setYears);setEditY(null);}}/>
               </div>
             </div>
           )}
-          {[...years].reverse().map((y) => {
+          {sortedYears.map((y) => {
             const sC=calcSaldo(y.balance_start_casa,y.rates_paid_casa,y.spese_totali_casa||0);
             const sB=calcSaldo(y.balance_start_box,y.rates_paid_box,y.spese_totali_box||0);
             const sCa=calcSaldo(y.balance_start_cantina,y.rates_paid_cantina,y.spese_totali_cantina||0);
@@ -758,8 +712,9 @@ export default function DatiPage({ property }: { property: Property }) {
       {/* ══ SPESE ══ */}
       {tab==='Spese' && (
         <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8, flexWrap:'wrap' }}>
             <SectionHeader title="Spese Fisse" sub="Dettaglio voci dal riparto SSA" onAdd={()=>{setEditF({...emptyF});setIsNew(true);}}/>
+            {fixed.length > 1 && <SortToggle sortAsc={sortFixedAsc} onToggle={()=>setSortFixedAsc(v=>!v)}/>}
           </div>
           <div style={{ display:'flex', justifyContent:'flex-end' }}>
             <ToggleBreakdown show={showBreakdownS} onToggle={()=>setShowBreakdownS(v=>!v)}/>
@@ -791,9 +746,10 @@ export default function DatiPage({ property }: { property: Property }) {
               </div>
             </div>
           )}
-          {[...fixed].reverse().map((r,i) => {
+          {sortedFixed.map((r,i) => {
             const tC=sfTot(r), tB=sfBox(r), tCa=sfCant(r), tot=tC+tB+tCa;
-            const prv=[...fixed].reverse()[i+1];
+            const idx = fixed.findIndex(x=>x.id===r.id);
+            const prv = idx > 0 ? fixed[idx-1] : null;
             const prvTot=prv?sfTot(prv)+sfBox(prv)+sfCant(prv):null;
             const isExp=expF===r.id;
             return (
@@ -803,12 +759,7 @@ export default function DatiPage({ property }: { property: Property }) {
                     <span className="tag tag-purple" style={{ marginBottom:6, display:'inline-flex' }}>{r.year_label}</span>
                     <div style={{ display:'flex', alignItems:'baseline', gap:4 }}>
                       <p style={{ fontSize:22, fontWeight:800, fontFamily:'var(--font-display)', lineHeight:1 }}>€{f0(tot)}</p>
-                      {prvTot !== null && (
-                        <button onClick={()=>openPct('Spese fisse totali',r.year_label,tot,prv.year_label,prvTot)}
-                          style={{ background:'transparent', border:'none', padding:0, cursor:'pointer' }}>
-                          <Delta cur={tot} prev={prvTot} invert/>
-                        </button>
-                      )}
+                      {prvTot !== null && (<button onClick={()=>openPct('Spese fisse totali',r.year_label,tot,prv!.year_label,prvTot)} style={{ background:'transparent', border:'none', padding:0, cursor:'pointer' }}><Delta cur={tot} prev={prvTot} invert/></button>)}
                     </div>
                     <p style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>totale spese fisse</p>
                   </div>
@@ -818,19 +769,7 @@ export default function DatiPage({ property }: { property: Property }) {
                     <button className="btn-danger" onClick={()=>del('fixed_expenses',r.id,setFixed)}><Trash2 size={13}/></button>
                   </div>
                 </div>
-                {showBreakdownS && (
-                  <>
-                    <div className="divider"/>
-                    <div className="grid3">
-                      {([['App C63',tC],['Box 13',tB],['Cantina',tCa]] as [string,number][]).map(([l,v])=>(
-                        <div key={l} style={{ textAlign:'center', padding:'7px 4px', background:'var(--bg3)', borderRadius:8 }}>
-                          <p style={{ fontSize:10, color:'var(--text2)', fontWeight:600, marginBottom:2 }}>{l}</p>
-                          <p style={{ fontSize:13, fontWeight:800 }}>€{fa(v)}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
+                {showBreakdownS && (<><div className="divider"/><div className="grid3">{([['App C63',tC],['Box 13',tB],['Cantina',tCa]] as [string,number][]).map(([l,v])=>(<div key={l} style={{ textAlign:'center', padding:'7px 4px', background:'var(--bg3)', borderRadius:8 }}><p style={{ fontSize:10, color:'var(--text2)', fontWeight:600, marginBottom:2 }}>{l}</p><p style={{ fontSize:13, fontWeight:800 }}>€{fa(v)}</p></div>))}</div></>)}
                 {isExp && (
                   <div style={{ marginTop:10 }}>
                     <div className="divider"/>
@@ -858,8 +797,9 @@ export default function DatiPage({ property }: { property: Property }) {
       {/* ══ CONSUMI ══ */}
       {tab==='Consumi' && (
         <div ref={consumiTopRef} style={{ display:'flex', flexDirection:'column', gap:12 }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8, flexWrap:'wrap' }}>
             <SectionHeader title="Consumi" sub="Letture contatori + costi dal riparto" onAdd={()=>{setEditC({...emptyC});setIsNew(true);}}/>
+            {consumi.length > 1 && <SortToggle sortAsc={sortConsumiAsc} onToggle={()=>setSortConsumiAsc(v=>!v)}/>}
           </div>
 
           <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
@@ -881,19 +821,15 @@ export default function DatiPage({ property }: { property: Property }) {
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f2f5"/>
                   <XAxis dataKey="anno" tick={{ fill:'#94a3b8', fontSize:11 }} axisLine={false} tickLine={false}/>
                   <YAxis tick={{ fill:'#94a3b8', fontSize:10 }} axisLine={false} tickLine={false} tickFormatter={v=>`€${v}`} width={50}/>
-                  <Tooltip content={<ChartTip/>}/>
-                  <Legend wrapperStyle={{ fontSize:11 }}/>
-                  <Bar dataKey="Risc." fill="#ef4444" stackId="a"/>
-                  <Bar dataKey="ACS" fill="#f97316" stackId="a"/>
-                  <Bar dataKey="Acq.fr." fill="#3b82f6" stackId="a" radius={[4,4,0,0]}/>
+                  <Tooltip content={<ChartTip/>}/><Legend wrapperStyle={{ fontSize:11 }}/>
+                  <Bar dataKey="Risc." fill="#ef4444" stackId="a"/><Bar dataKey="ACS" fill="#f97316" stackId="a"/><Bar dataKey="Acq.fr." fill="#3b82f6" stackId="a" radius={[4,4,0,0]}/>
                 </BarChart>
               ) : (
                 <LineChart data={consumiQtyData} margin={{ left:-10, right:8, top:4, bottom:0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f2f5"/>
                   <XAxis dataKey="anno" tick={{ fill:'#94a3b8', fontSize:11 }} axisLine={false} tickLine={false}/>
                   <YAxis tick={{ fill:'#94a3b8', fontSize:10 }} axisLine={false} tickLine={false} width={50}/>
-                  <Tooltip content={<ChartTipRaw suffix=""/>}/>
-                  <Legend wrapperStyle={{ fontSize:11 }}/>
+                  <Tooltip content={<ChartTipRaw suffix=""/>}/><Legend wrapperStyle={{ fontSize:11 }}/>
                   <Line type="monotone" dataKey="Riscaldamento (cal)" stroke="#ef4444" strokeWidth={2} dot={{ fill:'#ef4444', r:3 }}/>
                   <Line type="monotone" dataKey="Acqua calda (L)" stroke="#f97316" strokeWidth={2} dot={{ fill:'#f97316', r:3 }}/>
                   <Line type="monotone" dataKey="Acqua fredda (L)" stroke="#3b82f6" strokeWidth={2} dot={{ fill:'#3b82f6', r:3 }}/>
@@ -902,7 +838,6 @@ export default function DatiPage({ property }: { property: Property }) {
             </ResponsiveContainer>
           </div>
 
-          {/* Tabella costi unitari storica */}
           {riassunto.some(r=>r.rUnit) && (
             <div style={{ background:'#fff', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden' }}>
               <div style={{ padding:'8px 12px', background:'var(--bg3)', borderBottom:'1px solid var(--border)' }}>
@@ -910,34 +845,12 @@ export default function DatiPage({ property }: { property: Property }) {
               </div>
               <div style={{ overflowX:'auto' }}>
                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
-                  <thead>
-                    <tr style={{ background:'var(--bg3)' }}>
-                      <th style={{ padding:'6px 10px', textAlign:'left', fontWeight:700, color:'var(--text2)', fontSize:10 }}>Anno</th>
-                      <th style={{ padding:'6px 10px', textAlign:'right', fontWeight:700, color:'#ef4444', fontSize:10 }}>Risc. cal</th>
-                      <th style={{ padding:'6px 10px', textAlign:'right', fontWeight:700, color:'#ef4444', fontSize:10 }}>€/cal Δ</th>
-                      <th style={{ padding:'6px 10px', textAlign:'right', fontWeight:700, color:'#f97316', fontSize:10 }}>ACS L</th>
-                      <th style={{ padding:'6px 10px', textAlign:'right', fontWeight:700, color:'#f97316', fontSize:10 }}>€/L Δ</th>
-                      <th style={{ padding:'6px 10px', textAlign:'right', fontWeight:700, color:'#3b82f6', fontSize:10 }}>Acq.fr. L</th>
-                      <th style={{ padding:'6px 10px', textAlign:'right', fontWeight:700, color:'#3b82f6', fontSize:10 }}>€/L Δ</th>
-                    </tr>
-                  </thead>
+                  <thead><tr style={{ background:'var(--bg3)' }}>{['Anno','Risc. cal','€/cal Δ','ACS L','€/L Δ','Acq.fr. L','€/L Δ'].map(h=>(<th key={h} style={{ padding:'6px 10px', textAlign:'right', fontWeight:700, color:'var(--text2)', fontSize:10 }}>{h}</th>))}</tr></thead>
                   <tbody>
                     {riassunto.filter(r=>r.rKwh||r.aL||r.afL).map((r,i)=>{
                       const prv = riassunto.filter(x=>x.rKwh||x.aL||x.afL)[i-1];
                       const cell = (val: number|null, prvVal: number|null, col: string, label: string) => (
-                        <td style={{ padding:'6px 10px', textAlign:'right' }}>
-                          {val ? (
-                            <>
-                              <span style={{ fontWeight:700, color:col }}>{f2(val)}</span>
-                              {prvVal && (
-                                <button onClick={()=>openPct(label,r.anno,val,prv.anno,prvVal)}
-                                  style={{ display:'block', fontSize:9, fontWeight:700, color:val>prvVal?'var(--red)':'var(--green)', background:'transparent', border:'none', cursor:'pointer', padding:0, textDecoration:'underline dotted' }}>
-                                  {val>prvVal?'▲':'▼'}{Math.abs(pct(val,prvVal)).toFixed(1)}%
-                                </button>
-                              )}
-                            </>
-                          ) : <span style={{ color:'var(--text3)' }}>—</span>}
-                        </td>
+                        <td style={{ padding:'6px 10px', textAlign:'right' }}>{val ? (<><span style={{ fontWeight:700, color:col }}>{f2(val)}</span>{prvVal && (<button onClick={()=>openPct(label,r.anno,val,prv.anno,prvVal)} style={{ display:'block', fontSize:9, fontWeight:700, color:val>prvVal?'var(--red)':'var(--green)', background:'transparent', border:'none', cursor:'pointer', padding:0, textDecoration:'underline dotted' }}>{val>prvVal?'▲':'▼'}{Math.abs(pct(val,prvVal)).toFixed(1)}%</button>)}</>) : <span style={{ color:'var(--text3)' }}>—</span>}</td>
                       );
                       return (
                         <tr key={r.anno} style={{ borderBottom:'1px solid var(--border)' }}>
@@ -964,43 +877,25 @@ export default function DatiPage({ property }: { property: Property }) {
                 <div><label>Anno</label><input value={editC.year_label||''} onChange={e=>setEditC((p:any)=>({...p,year_label:e.target.value}))} placeholder="24/25"/></div>
                 <div style={{ background:'var(--bg3)', borderRadius:10, padding:12 }}>
                   <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', marginBottom:8 }}>Letture contatori</p>
-                  <div className="grid2">
-                    <NF lbl="Risc. iniziale" fld="risc_lettura_iniziale" st={editC} fn={numC}/>
-                    <NF lbl="Risc. finale" fld="risc_lettura_finale" st={editC} fn={numC}/>
-                    <NF lbl="ACS iniziale" fld="acqua_calda_lettura_iniziale" st={editC} fn={numC}/>
-                    <NF lbl="ACS finale" fld="acqua_calda_lettura_finale" st={editC} fn={numC}/>
-                    <NF lbl="Acqua fredda iniziale" fld="acqua_fredda_lettura_iniziale" st={editC} fn={numC}/>
-                    <NF lbl="Acqua fredda finale" fld="acqua_fredda_lettura_finale" st={editC} fn={numC}/>
-                  </div>
+                  <div className="grid2"><NF lbl="Risc. iniziale" fld="risc_lettura_iniziale" st={editC} fn={numC}/><NF lbl="Risc. finale" fld="risc_lettura_finale" st={editC} fn={numC}/><NF lbl="ACS iniziale" fld="acqua_calda_lettura_iniziale" st={editC} fn={numC}/><NF lbl="ACS finale" fld="acqua_calda_lettura_finale" st={editC} fn={numC}/><NF lbl="Acqua fredda iniziale" fld="acqua_fredda_lettura_iniziale" st={editC} fn={numC}/><NF lbl="Acqua fredda finale" fld="acqua_fredda_lettura_finale" st={editC} fn={numC}/></div>
                 </div>
                 <div style={{ background:'var(--bg3)', borderRadius:10, padding:12 }}>
                   <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', marginBottom:8 }}>Costi dal Riparto (€)</p>
-                  <div className="grid2">
-                    <NF lbl="Riscaldamento consumo" fld="riscaldamento_consumo" st={editC} fn={numC}/>
-                    <NF lbl="Riscaldamento involont." fld="riscaldamento_involontario" st={editC} fn={numC}/>
-                    <NF lbl="ACS consumo" fld="acqua_calda_consumo" st={editC} fn={numC}/>
-                    <NF lbl="ACS involontaria" fld="acqua_calda_involontaria" st={editC} fn={numC}/>
-                    <NF lbl="Acqua potabile" fld="acqua_potabile" st={editC} fn={numC}/>
-                    <NF lbl="Energia el. box" fld="energia_elettrica_box" st={editC} fn={numC}/>
-                    <NF lbl="Movimenti personali" fld="movimenti_personali" st={editC} fn={numC}/>
-                  </div>
+                  <div className="grid2"><NF lbl="Riscaldamento consumo" fld="riscaldamento_consumo" st={editC} fn={numC}/><NF lbl="Riscaldamento involont." fld="riscaldamento_involontario" st={editC} fn={numC}/><NF lbl="ACS consumo" fld="acqua_calda_consumo" st={editC} fn={numC}/><NF lbl="ACS involontaria" fld="acqua_calda_involontaria" st={editC} fn={numC}/><NF lbl="Acqua potabile" fld="acqua_potabile" st={editC} fn={numC}/><NF lbl="Energia el. box" fld="energia_elettrica_box" st={editC} fn={numC}/><NF lbl="Movimenti personali" fld="movimenti_personali" st={editC} fn={numC}/></div>
                 </div>
                 <div style={{ background:'var(--bg3)', borderRadius:10, padding:12 }}>
                   <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', marginBottom:8 }}>Totali gestione</p>
-                  <div className="grid3">
-                    <NF lbl="App C63" fld="totale_casa" st={editC} fn={numC}/>
-                    <NF lbl="Box 13" fld="totale_box" st={editC} fn={numC}/>
-                    <NF lbl="Cantina" fld="totale_cantina" st={editC} fn={numC}/>
-                  </div>
+                  <div className="grid3"><NF lbl="App C63" fld="totale_casa" st={editC} fn={numC}/><NF lbl="Box 13" fld="totale_box" st={editC} fn={numC}/><NF lbl="Cantina" fld="totale_cantina" st={editC} fn={numC}/></div>
                 </div>
                 <FormActions onCancel={()=>setEditC(null)} onSave={async()=>{await save('consumption_data',editC,setConsumi);setEditC(null);}}/>
               </div>
             </div>
           )}
 
-          {[...consumi].reverse().map((r,i) => {
+          {sortedConsumi.map((r,i) => {
             const tot=r.totale_casa+r.totale_box+r.totale_cantina;
-            const prv=[...consumi].reverse()[i+1];
+            const idx = consumi.findIndex(x=>x.id===r.id);
+            const prv = idx > 0 ? consumi[idx-1] : null;
             const prvTot=prv?prv.totale_casa+prv.totale_box+prv.totale_cantina:null;
             const rKwh=r.risc_lettura_finale&&r.risc_lettura_iniziale?r.risc_lettura_finale-r.risc_lettura_iniziale:null;
             const aL  =r.acqua_calda_lettura_finale&&r.acqua_calda_lettura_iniziale?r.acqua_calda_lettura_finale-r.acqua_calda_lettura_iniziale:null;
@@ -1043,12 +938,7 @@ export default function DatiPage({ property }: { property: Property }) {
                     </div>
                     <div style={{ display:'flex', alignItems:'baseline', gap:4 }}>
                       <p style={{ fontSize:20, fontWeight:800, fontFamily:'var(--font-display)', lineHeight:1 }}>€{f0(tot)}</p>
-                      {prvTot !== null && (
-                        <button onClick={()=>openPct(`Consumi totali — ${prv.year_label} → ${r.year_label}`, r.year_label, tot, prv.year_label, prvTot)}
-                          style={{ background:'transparent', border:'none', padding:0, cursor:'pointer' }}>
-                          <Delta cur={tot} prev={prvTot} invert/>
-                        </button>
-                      )}
+                      {prvTot !== null && (<button onClick={()=>openPct(`Consumi totali — ${prv!.year_label} → ${r.year_label}`, r.year_label, tot, prv!.year_label, prvTot)} style={{ background:'transparent', border:'none', padding:0, cursor:'pointer' }}><Delta cur={tot} prev={prvTot} invert/></button>)}
                     </div>
                     {(rKwh || aL || afL) && (
                       <div style={{ display:'flex', gap:5, marginTop:6, flexWrap:'wrap' }}>
@@ -1064,19 +954,7 @@ export default function DatiPage({ property }: { property: Property }) {
                     <button className="btn-danger" onClick={()=>del('consumption_data',r.id,setConsumi)}><Trash2 size={13}/></button>
                   </div>
                 </div>
-                {showBreakdownC && (
-                  <>
-                    <div className="divider"/>
-                    <div className="grid3">
-                      {([['App C63',r.totale_casa],['Box 13',r.totale_box],['Cantina',r.totale_cantina]] as [string,number][]).map(([l,v])=>(
-                        <div key={l} style={{ textAlign:'center', padding:'7px 4px', background:'var(--bg3)', borderRadius:8 }}>
-                          <p style={{ fontSize:10, color:'var(--text2)', fontWeight:600, marginBottom:2 }}>{l}</p>
-                          <p style={{ fontSize:13, fontWeight:800 }}>€{fa(v)}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
+                {showBreakdownC && (<><div className="divider"/><div className="grid3">{([['App C63',r.totale_casa],['Box 13',r.totale_box],['Cantina',r.totale_cantina]] as [string,number][]).map(([l,v])=>(<div key={l} style={{ textAlign:'center', padding:'7px 4px', background:'var(--bg3)', borderRadius:8 }}><p style={{ fontSize:10, color:'var(--text2)', fontWeight:600, marginBottom:2 }}>{l}</p><p style={{ fontSize:13, fontWeight:800 }}>€{fa(v)}</p></div>))}</div></>)}
                 {isExp && <ConsumoDetail r={r} rKwh={rKwh} aL={aL} afL={afL} rU={rU} aU={aU} afU={afU} valChecks={valChecks} discChecksCard={discChecksCard}/>}
               </div>
             );
@@ -1087,7 +965,10 @@ export default function DatiPage({ property }: { property: Property }) {
       {/* ══ RATE ══ */}
       {tab==='Rate' && (
         <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-          <SectionHeader title="Rate pagate" sub={`${rates.length} pagamenti totali`} onAdd={()=>{setEditR({...emptyR});setIsNew(true);}}/>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8, flexWrap:'wrap' }}>
+            <SectionHeader title="Rate pagate" sub={`${rates.length} pagamenti totali`} onAdd={()=>{setEditR({...emptyR});setIsNew(true);}}/>
+            {allYrs.length > 1 && <SortToggle sortAsc={sortRatesAsc} onToggle={()=>setSortRatesAsc(v=>!v)}/>}
+          </div>
 
           <div style={{ display:'flex', justifyContent:'flex-end' }}>
             <ToggleBreakdown show={showBreakdownR} onToggle={()=>setShowBreakdownR(v=>!v)}/>
@@ -1123,8 +1004,7 @@ export default function DatiPage({ property }: { property: Property }) {
                 </div>
                 <div>
                   <label>Importo totale (€) — ripartito automaticamente per millesimi</label>
-                  <input type="number" step="0.01" placeholder="es. 413.50"
-                    value={editR._importo_totale||''}
+                  <input type="number" step="0.01" placeholder="es. 413.50" value={editR._importo_totale||''}
                     onChange={e=>{
                       const tot=parseFloat(e.target.value)||0;
                       const totM=3.394+0.576+0.059;
@@ -1147,7 +1027,7 @@ export default function DatiPage({ property }: { property: Property }) {
             </div>
           )}
 
-          {allYrs.map(yl => {
+          {sortedAllYrs.map(yl => {
             const rAnno = rates.filter(r=>r.year_label===yl);
             if (rAnno.length===0) return null;
             const totC  = rAnno.reduce((s:number,r:any)=>s+(parseFloat(r.importo_casa)||0),0);
@@ -1204,9 +1084,7 @@ export default function DatiPage({ property }: { property: Property }) {
                               </div>
                             )}
                           </div>
-                          <div style={{ textAlign:'right' }}>
-                            <p style={{ fontWeight:800, fontSize:15 }}>€{fa(tot)}</p>
-                          </div>
+                          <div style={{ textAlign:'right' }}><p style={{ fontWeight:800, fontSize:15 }}>€{fa(tot)}</p></div>
                           <div style={{ display:'flex', gap:3 }}>
                             <button className="btn-icon" style={{ padding:5 }} onClick={()=>{setEditR({...r});setIsNew(false);}}><Pencil size={12}/></button>
                             <button className="btn-danger" style={{ padding:5 }} onClick={()=>del('rate_pagamenti',r.id,setRates)}><Trash2 size={12}/></button>
@@ -1219,8 +1097,7 @@ export default function DatiPage({ property }: { property: Property }) {
                 {atteso && (
                   <div style={{ marginTop:10 }}>
                     <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:'var(--text3)', marginBottom:4 }}>
-                      <span>Versato vs atteso</span>
-                      <span>{Math.min(100, Math.round(totAll/atteso*100))}%</span>
+                      <span>Versato vs atteso</span><span>{Math.min(100, Math.round(totAll/atteso*100))}%</span>
                     </div>
                     <div style={{ background:'var(--bg3)', borderRadius:4, height:6, overflow:'hidden' }}>
                       <div style={{ width:`${Math.min(100, totAll/atteso*100)}%`, height:'100%', background: ok?'var(--green)':'var(--amber)', borderRadius:4, transition:'width 0.4s' }}/>
@@ -1258,33 +1135,17 @@ export default function DatiPage({ property }: { property: Property }) {
                 <div style={{ background:'#fff', border:'1px solid var(--border)', borderRadius:14, overflow:'hidden' }}>
                   <div style={{ overflowX:'auto' }}>
                     <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-                      <thead>
-                        <tr style={{ background:'var(--bg3)' }}>
-                          {['Voce','Preventivo 24/25','Consuntivo 24/25','Δ €','Δ %'].map(h=>(
-                            <th key={h} style={{ padding:'8px 10px', textAlign:'right', fontWeight:700, color:'var(--text2)', fontSize:10, whiteSpace:'nowrap' }}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
+                      <thead><tr style={{ background:'var(--bg3)' }}>{['Voce','Preventivo 24/25','Consuntivo 24/25','Δ €','Δ %'].map(h=>(<th key={h} style={{ padding:'8px 10px', textAlign:'right', fontWeight:700, color:'var(--text2)', fontSize:10, whiteSpace:'nowrap' }}>{h}</th>))}</tr></thead>
                       <tbody>
                         {rows.map((r,i) => {
                           const diff=r.cons-r.prev, dp=r.prev?pct(r.cons,r.prev):0;
                           return (
                             <tr key={r.l} style={{ borderBottom:'1px solid var(--border)', background:i%2===0?'#fff':'var(--bg3)' }}>
-                              <td style={{ padding:'8px 10px' }}>
-                                <p style={{ fontWeight:600 }}>{r.l}</p>
-                                <p style={{ fontSize:9, color:'var(--text3)' }}>{r.diff}</p>
-                              </td>
+                              <td style={{ padding:'8px 10px' }}><p style={{ fontWeight:600 }}>{r.l}</p><p style={{ fontSize:9, color:'var(--text3)' }}>{r.diff}</p></td>
                               <td style={{ padding:'8px 10px', textAlign:'right' }}>€{fa(r.prev)}</td>
                               <td style={{ padding:'8px 10px', textAlign:'right', fontWeight:700 }}>€{fa(r.cons)}</td>
                               <td style={{ padding:'8px 10px', textAlign:'right', fontWeight:700, color:diff>0?'var(--red)':'var(--green)' }}>{diff>=0?'+':'-'}€{fa(Math.abs(diff))}</td>
-                              <td style={{ padding:'8px 10px', textAlign:'right' }}>
-                                {r.prev ? (
-                                  <button onClick={()=>openPct(`${r.l} — Preventivo vs Consuntivo`, 'Consuntivo 24/25', r.cons, 'Preventivo 24/25', r.prev)}
-                                    style={{ fontWeight:700, color:dp>0?'var(--red)':'var(--green)', background:dp>0?'var(--red-bg)':'var(--green-bg)', border:'none', borderRadius:5, padding:'2px 7px', fontSize:11, cursor:'pointer', textDecoration:'underline dotted' }}>
-                                    {dp>=0?'+':'-'}{Math.abs(dp).toFixed(1)}%
-                                  </button>
-                                ) : '—'}
-                              </td>
+                              <td style={{ padding:'8px 10px', textAlign:'right' }}>{r.prev ? (<button onClick={()=>openPct(`${r.l} — Preventivo vs Consuntivo`, 'Consuntivo 24/25', r.cons, 'Preventivo 24/25', r.prev)} style={{ fontWeight:700, color:dp>0?'var(--red)':'var(--green)', background:dp>0?'var(--red-bg)':'var(--green-bg)', border:'none', borderRadius:5, padding:'2px 7px', fontSize:11, cursor:'pointer', textDecoration:'underline dotted' }}>{dp>=0?'+':'-'}{Math.abs(dp).toFixed(1)}%</button>) : '—'}</td>
                             </tr>
                           );
                         })}
@@ -1293,12 +1154,7 @@ export default function DatiPage({ property }: { property: Property }) {
                           <td style={{ padding:'8px 10px', textAlign:'right' }}>€{fa(tP)}</td>
                           <td style={{ padding:'8px 10px', textAlign:'right' }}>€{fa(tC)}</td>
                           <td style={{ padding:'8px 10px', textAlign:'right', color:(tC-tP)>0?'var(--red)':'var(--green)' }}>{(tC-tP)>=0?'+':'-'}€{fa(Math.abs(tC-tP))}</td>
-                          <td style={{ padding:'8px 10px', textAlign:'right' }}>
-                            <button onClick={()=>openPct('Totale — Preventivo vs Consuntivo','Consuntivo 24/25',tC,'Preventivo 24/25',tP)}
-                              style={{ fontWeight:800, color:pct(tC,tP)>0?'var(--red)':'var(--green)', background:pct(tC,tP)>0?'var(--red-bg)':'var(--green-bg)', border:'none', borderRadius:5, padding:'2px 7px', fontSize:12, cursor:'pointer', textDecoration:'underline dotted' }}>
-                              {pct(tC,tP)>=0?'+':'-'}{Math.abs(pct(tC,tP)).toFixed(1)}%
-                            </button>
-                          </td>
+                          <td style={{ padding:'8px 10px', textAlign:'right' }}><button onClick={()=>openPct('Totale — Preventivo vs Consuntivo','Consuntivo 24/25',tC,'Preventivo 24/25',tP)} style={{ fontWeight:800, color:pct(tC,tP)>0?'var(--red)':'var(--green)', background:pct(tC,tP)>0?'var(--red-bg)':'var(--green-bg)', border:'none', borderRadius:5, padding:'2px 7px', fontSize:12, cursor:'pointer', textDecoration:'underline dotted' }}>{pct(tC,tP)>=0?'+':'-'}{Math.abs(pct(tC,tP)).toFixed(1)}%</button></td>
                         </tr>
                       </tbody>
                     </table>
@@ -1311,8 +1167,7 @@ export default function DatiPage({ property }: { property: Property }) {
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f2f5"/>
                       <XAxis dataKey="l" tick={{ fill:'#94a3b8', fontSize:9 }} axisLine={false} tickLine={false} angle={-30} textAnchor="end"/>
                       <YAxis tick={{ fill:'#94a3b8', fontSize:9 }} axisLine={false} tickLine={false} tickFormatter={v=>`€${v}`} width={45}/>
-                      <Tooltip content={<ChartTip/>}/>
-                      <Legend wrapperStyle={{ fontSize:11 }}/>
+                      <Tooltip content={<ChartTip/>}/><Legend wrapperStyle={{ fontSize:11 }}/>
                       <Bar dataKey="prev" name="Preventivo" fill="#94a3b8" radius={[3,3,0,0]}/>
                       <Bar dataKey="cons" name="Consuntivo" fill="#2563eb" radius={[3,3,0,0]}/>
                     </BarChart>
