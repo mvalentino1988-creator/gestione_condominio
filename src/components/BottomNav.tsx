@@ -13,9 +13,9 @@ export default function BottomNav({ page, setPage }: { page: Page; setPage: (p: 
     <nav style={{
       position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)',
       width: '100%', maxWidth: 'var(--max-w)',
-      background: 'rgba(255,255,255,0.97)',
+      background: 'rgba(255,255,255,0.96)',
       borderTop: '1px solid var(--border)',
-      backdropFilter: 'blur(12px)',
+      backdropFilter: 'blur(16px)',
       display: 'flex',
       paddingBottom: 'var(--safe-bottom)',
       zIndex: 100,
@@ -23,27 +23,26 @@ export default function BottomNav({ page, setPage }: { page: Page; setPage: (p: 
       {items.map(({ id, label, icon: Icon }) => {
         const active = page === id;
         return (
-          <button key={id} onClick={() => setPage(id)} style={{
-            flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            gap: 3, padding: '10px 4px 8px',
-            background: 'transparent', borderRadius: 0,
-            color: active ? 'var(--accent)' : 'var(--text3)',
-            fontSize: 11, fontWeight: active ? 700 : 500,
-            transition: 'color 0.15s', position: 'relative',
-          }}>
+          <button
+            key={id}
+            onClick={() => setPage(id)}
+            style={{
+              flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              gap: 4, padding: '10px 4px 8px',
+              background: 'transparent', borderRadius: 0,
+              color: active ? 'var(--ink)' : 'var(--text3)',
+              fontSize: 10, fontWeight: active ? 700 : 400,
+              letterSpacing: '0.05em', textTransform: 'uppercase',
+              transition: 'color 0.13s', position: 'relative',
+            }}
+          >
             {active && (
               <div style={{
                 position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
-                width: 28, height: 3, background: 'var(--accent)', borderRadius: '0 0 4px 4px',
+                width: 20, height: 2, background: 'var(--ink)', borderRadius: '0 0 2px 2px',
               }} />
             )}
-            <div style={{
-              width: 38, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: active ? 'var(--accent-light)' : 'transparent',
-              borderRadius: 8, transition: 'background 0.15s',
-            }}>
-              <Icon size={19} strokeWidth={active ? 2.5 : 1.8} />
-            </div>
+            <Icon size={18} strokeWidth={active ? 2 : 1.5} />
             <span>{label}</span>
           </button>
         );
