@@ -7,9 +7,10 @@ interface Props {
   properties: Property[];
   onSelectProperty: (p: Property) => void;
   onAddProperty: () => void;
+  onGoHome?: () => void;
 }
 
-export default function Header({ property, properties, onSelectProperty, onAddProperty }: Props) {
+export default function Header({ property, properties, onSelectProperty, onAddProperty, onGoHome }: Props) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -28,15 +29,30 @@ export default function Header({ property, properties, onSelectProperty, onAddPr
         margin: '0 auto',
         width: '100%',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <div style={{ background: 'var(--accent)', borderRadius: 9, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(22,128,60,0.35)' }}>
+        {/* Logo cliccabile → torna alla home */}
+        <button
+          onClick={onGoHome}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 9,
+            background: 'transparent', border: 'none', padding: 0,
+            cursor: onGoHome ? 'pointer' : 'default',
+            borderRadius: 8,
+          }}
+          title="Torna alla home"
+        >
+          <div style={{
+            background: 'var(--accent)', borderRadius: 9, width: 34, height: 34,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 1px 4px rgba(22,128,60,0.35)',
+            transition: 'transform 0.15s',
+          }}>
             <Building2 size={17} color="#fff" strokeWidth={2.5} />
           </div>
           <div>
             <span style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.3px' }}>Condo</span>
             <span style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 500, color: 'var(--accent)', letterSpacing: '-0.3px' }}>Manager</span>
           </div>
-        </div>
+        </button>
 
         {property && (
           <button onClick={() => setOpen(true)} style={{
