@@ -111,7 +111,7 @@ function Tabs({ active, onChange }: { active: Tab; onChange: (t: Tab) => void })
       <div className="hide-mobile" style={{
         display:'flex', background:'var(--bg3)', borderRadius:12,
         padding:3, gap:2, overflowX:'auto', WebkitOverflowScrolling:'touch',
-        scrollbarWidth:'none', MsOverflowStyle:'none',
+        scrollbarWidth:'none' as const, msOverflowStyle:'none',
       }}>
         {TABS.map(t => (
           <button key={t} onClick={() => onChange(t)} style={{
