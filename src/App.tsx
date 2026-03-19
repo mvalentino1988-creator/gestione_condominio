@@ -39,7 +39,7 @@ export default function App() {
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg)' }}>
-      <div style={{ width: 22, height: 22, borderRadius: '50%', border: '2px solid var(--border2)', borderTopColor: 'var(--ink)', animation: 'spin 0.6s linear infinite' }} />
+      <div style={{ width: 22, height: 22, borderRadius: '50%', border: '2px solid var(--border2)', borderTopColor: 'var(--accent)', animation: 'spin 0.6s linear infinite' }} />
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
@@ -89,18 +89,12 @@ function PropertyModal({ onSave, onClose, canClose }: { onSave: (n: string, a: s
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(17,16,16,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20, backdropFilter: 'blur(4px)' }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(26,24,20,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20, backdropFilter: 'blur(4px)' }}>
       <div className="card fade-up" style={{ width: '100%', maxWidth: 380, padding: 28, boxShadow: 'var(--shadow-lg)' }}>
-        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 400, marginBottom: 20 }}>Nuovo immobile</h2>
+        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, marginBottom: 20 }}>Nuovo immobile</h2>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div>
-            <label>Nome</label>
-            <input placeholder="es. Casa Milano" value={name} onChange={e => setName(e.target.value)} autoFocus />
-          </div>
-          <div>
-            <label>Indirizzo (opzionale)</label>
-            <input placeholder="Via…" value={address} onChange={e => setAddress(e.target.value)} />
-          </div>
+          <div><label>Nome</label><input placeholder="es. Casa Milano" value={name} onChange={e => setName(e.target.value)} autoFocus /></div>
+          <div><label>Indirizzo (opzionale)</label><input placeholder="Via…" value={address} onChange={e => setAddress(e.target.value)} /></div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
             {canClose && <button className="btn-ghost" onClick={onClose}>Annulla</button>}
             <button className="btn-primary" onClick={() => name && onSave(name, address)}>Salva</button>
