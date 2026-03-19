@@ -2,17 +2,26 @@ import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.condomanager.app',
-  appName: 'Condo Manager',
+  appName: 'CasaMGR',
   webDir: 'dist',
   server: {
-    androidScheme: 'https'
+    androidScheme: 'https',
+  },
+  android: {
+    backgroundColor: '#f5f2ed',
   },
   plugins: {
     StatusBar: {
       style: 'DARK',
-      backgroundColor: '#1a1a2e'
-    }
-  }
+      backgroundColor: '#ffffff',
+      overlaysWebView: true,
+    },
+    SplashScreen: {
+      launchShowDuration: 800,
+      backgroundColor: '#f5f2ed',
+      showSpinner: false,
+    },
+  },
 };
 
 export default config;
