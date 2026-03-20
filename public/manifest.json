@@ -1,14 +1,14 @@
 {
-  "name": "CasaMGR",
+  "name": "Gestione Casa",
   "short_name": "CasaMGR",
   "description": "Gestione spese condominiali",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "orientation": "portrait-primary",
-  "background_color": "#f5f2ed",
-  "theme_color": "#f5f2ed",
-  "categories": ["finance", "utilities"],
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#16803c",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "icon-192.png",
@@ -33,14 +33,6 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
-    }
-  ],
-  "screenshots": [
-    {
-      "src": "icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "form_factor": "narrow"
     }
   ]
 }
