@@ -55,7 +55,41 @@ const PV = {
 const TABS = ['Riepilogo','Rendiconto','Spese','Consumi','Rate','Confronto'] as const;
 type Tab = typeof TABS[number];
 
-// ── PctModal — mostra il dettaglio del calcolo % ──────────────
+const TAB_LABELS: Record<Tab, string> = {
+  'Riepilogo':  '📊 Riepilogo',
+  'Rendiconto': '📋 Rendiconto',
+  'Spese':      '💶 Spese fisse',
+  'Consumi':    '🔥 Consumi',
+  'Rate':       '💳 Rate',
+  'Confronto':  '⚖️ Confronto',
+};
+
+function TabSelector({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
+  return (
+    <div style={{ position: 'relative' }}>
+      <select
+        value={active}
+        onChange={e => onChange(e.target.value as Tab)}
+        style={{
+          width: '100%', appearance: 'none', WebkitAppearance: 'none',
+          background: 'var(--bg2)', border: '1.5px solid var(--border2)',
+          borderRadius: 12, padding: '10px 40px 10px 14px',
+          fontSize: 15, fontWeight: 700, color: 'var(--accent)',
+          fontFamily: 'var(--font-body)', cursor: 'pointer', outline: 'none',
+        }}
+      >
+        {TABS.map(t => (
+          <option key={t} value={t}>{TAB_LABELS[t]}</option>
+        ))}
+      </select>
+      <div style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M3 5l4 4 4-4" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+    </div>
+  );
+}
 type PctModalData = { title: string; curLabel: string; curVal: number; prevLabel: string; prevVal: number; pct: number };
 
 function PctModal({ title, curLabel, curVal, prevLabel, prevVal, pct: pctVal, onClose }: PctModalData & { onClose: () => void }) {
@@ -120,20 +154,6 @@ function validaLetture(ini: number|null, fin: number|null, costo: number, label:
   return { ok: true, msg: '', severity: 'ok' };
 }
 
-function Tabs({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
-  return (
-    <div style={{ display:'flex', background:'var(--bg3)', borderRadius:12, padding:4, gap:2, overflowX:'auto', WebkitOverflowScrolling:'touch', scrollbarWidth:'none' }}>
-      {TABS.map(t => (
-        <button key={t} onClick={() => onChange(t)} style={{
-          flex:'none', padding:'7px 10px', borderRadius:9, fontSize:13, fontWeight:600, whiteSpace:'nowrap',
-          background: active===t ? '#fff' : 'transparent',
-          color: active===t ? 'var(--accent)' : 'var(--text2)',
-          boxShadow: active===t ? 'var(--shadow-xs)' : 'none',
-        }}>{t}</button>
-      ))}
-    </div>
-  );
-}
 
 function Delta({ cur, prev, invert = false, onClick }: { cur: number; prev: number | null; invert?: boolean; onClick?: () => void }) {
   if (prev === null || prev === 0) return null;
@@ -231,10 +251,10 @@ function SectionHeader({ title, sub, onAdd }: { title:string; sub?:string; onAdd
   return (
     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
       <div>
-        <h2 style={{ fontFamily:'var(--font-display)', fontSize:20, fontWeight:800 }}>{title}</h2>
-        {sub && <p style={{ color:'var(--text3)', fontSize:12, marginTop:1 }}>{sub}</p>}
+        <h2 style={{ fontFamily:'var(--font-display)', fontSize:18, fontWeight:800 }}>{title}</h2>
+        {sub && <p style={{ color:'var(--text3)', fontSize:11, marginTop:1 }}>{sub}</p>}
       </div>
-      {onAdd && <button className="btn-primary" onClick={onAdd}><Plus size={14}/>Nuovo</button>}
+      {onAdd && <button className="btn-primary" onClick={onAdd} style={{ padding:'7px 12px', fontSize:13 }}><Plus size={13}/>Nuovo</button>}
     </div>
   );
 }
@@ -505,14 +525,14 @@ export default function DatiPage({ property }: { property: Property }) {
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-      <Tabs active={tab} onChange={t=>{setTab(t);setEditY(null);setEditF(null);setEditC(null);setEditR(null);}}/>
+      <TabSelector active={tab} onChange={t=>{setTab(t);setEditY(null);setEditF(null);setEditC(null);setEditR(null);}}/>
 
-      {/* ── Banner esercizio in corso ── */}
-      <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:10 }}>
-        <Star size={13} fill="#b45309" color="#b45309"/>
-        <span style={{ fontSize:12, fontWeight:700, color:'#b45309' }}>Esercizio in corso: <strong>{CURRENT_EXERCISE}</strong></span>
+      {/* ── Banner esercizio in corso — compact ── */}
+      <div style={{ display:'flex', alignItems:'center', gap:7, padding:'7px 12px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:10 }}>
+        <Star size={11} fill="#b45309" color="#b45309"/>
+        <span style={{ fontSize:12, fontWeight:700, color:'#b45309' }}>In corso: <strong>{CURRENT_EXERCISE}</strong></span>
         {currentRiassunto && currentRiassunto.rateAnno > 0 && (
-          <span style={{ fontSize:11, color:'#92400e', marginLeft:4 }}>· €{f0(currentRiassunto.rateAnno)} versati ({currentRiassunto.rateCount} {pluraleRate(currentRiassunto.rateCount)})</span>
+          <span style={{ fontSize:11, color:'#92400e', marginLeft:2 }}>· €{f0(currentRiassunto.rateAnno)} ({currentRiassunto.rateCount} {pluraleRate(currentRiassunto.rateCount)})</span>
         )}
       </div>
 
@@ -520,7 +540,7 @@ export default function DatiPage({ property }: { property: Property }) {
       {tab==='Riepilogo' && (
         <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-            <h2 style={{ fontFamily:'var(--font-display)', fontSize:22, fontWeight:800 }}>Riepilogo annuale</h2>
+            <h2 style={{ fontFamily:'var(--font-display)', fontSize:18, fontWeight:800 }}>Riepilogo annuale</h2>
             <ToggleBreakdown show={showBreakdownR} onToggle={()=>setShowBreakdownR(v=>!v)}/>
           </div>
 
@@ -1505,7 +1525,7 @@ function ConfriontoTab({ allYrs, fixed, consumi, rates, currentExercise, openPct
 
   if (anniConPreventivo.length===0) return (
     <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-      <h2 style={{ fontFamily:'var(--font-display)', fontSize:22, fontWeight:800 }}>Confronto Preventivo / Consuntivo</h2>
+      <h2 style={{ fontFamily:'var(--font-display)', fontSize:18, fontWeight:800 }}>Confronto Preventivo / Consuntivo</h2>
       <p style={{ color:'var(--text3)', textAlign:'center', padding:24 }}>Nessun preventivo definito.</p>
     </div>
   );
@@ -1526,7 +1546,7 @@ function ConfriontoTab({ allYrs, fixed, consumi, rates, currentExercise, openPct
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
-        <h2 style={{ fontFamily:'var(--font-display)', fontSize:22, fontWeight:800 }}>Preventivo vs Consuntivo</h2>
+        <h2 style={{ fontFamily:'var(--font-display)', fontSize:18, fontWeight:800 }}>Preventivo vs Consuntivo</h2>
       </div>
 
       {/* Selettore anno */}
