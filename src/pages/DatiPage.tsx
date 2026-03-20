@@ -22,11 +22,9 @@ const calcSaldo = (start: number, rate: number, spese: number) => start - rate +
 const pluraleRate = (n: number) => n === 1 ? 'rata' : 'rate';
 
 // ── Esercizio in corso ────────────────────────────────────────
-// L'esercizio fiscale va da ottobre a settembre.
-// Esempio: ottobre 2025 – settembre 2026 → label "25/26"
 function getCurrentExerciseLabel(): string {
   const now = new Date();
-  const month = now.getMonth() + 1; // 1-12
+  const month = now.getMonth() + 1;
   const year = now.getFullYear();
   if (month >= 10) {
     return `${String(year).slice(2)}/${String(year + 1).slice(2)}`;
@@ -39,6 +37,18 @@ const CURRENT_EXERCISE = getCurrentExerciseLabel();
 
 // Millesimi Valentino
 const MILL = { prop: 3.394, gen: 3.394, scalac: 20.288, box_prop: 0.576, box_gen: 0.576, box_scalac: 3.443, cant_prop: 0.059, cant_gen: 0.059 };
+
+// ── DATI STORICI TOTALE GESTIONE (da rendiconto SSA) ──────────
+// Fonte: estratti dal PDF Binder2 - "Totale gestione" per unità
+// C63 VALENTINO MATTIA + Box13 + Cant10c
+const TOTALE_GESTIONE_STORICO: Record<string, { c63: number; box: number; cant: number }> = {
+  '19/20': { c63: 682.05,   box: 113.59, cant: 8.03  },
+  '20/21': { c63: 1258.84,  box: 147.35, cant: 11.69 },
+  '21/22': { c63: 1285.55,  box: 164.16, cant: 12.89 },
+  '22/23': { c63: 1657.43,  box: 137.76, cant: 13.29 },
+  // 23/24 e 24/25 calcolati dinamicamente dall'app (spese fisse + consumi)
+};
+
 // Preventivo 25/26 totali condominio
 const P2526 = { prop: 52129.06, gen: 149737.47, man: 10000.00, scalac: 4500.00, asc_c: 3802.22, tele: 5054.50, risc_inv: 35349.04, acs_inv: 31638.80 };
 const PV = {
@@ -154,7 +164,6 @@ function validaLetture(ini: number|null, fin: number|null, costo: number, label:
   return { ok: true, msg: '', severity: 'ok' };
 }
 
-
 function Delta({ cur, prev, invert = false, onClick }: { cur: number; prev: number | null; invert?: boolean; onClick?: () => void }) {
   if (prev === null || prev === 0) return null;
   const d = pct(cur, prev), diff = cur - prev, up = diff > 0;
@@ -178,7 +187,6 @@ function Chip({ v }: { v: number }) {
   return <span style={{ fontSize:11, fontWeight:700, color:v>=0?'var(--green)':'var(--red)', background:v>=0?'var(--green-bg)':'var(--red-bg)', borderRadius:6, padding:'2px 8px' }}>{v>=0?'▲ CREDITO':'▼ DEBITO'} €{fa(v)}</span>;
 }
 
-// Badge "Esercizio in corso"
 function CurrentBadge() {
   return (
     <span style={{
@@ -387,7 +395,6 @@ function ConsumoDetail({ r, rKwh, aL, afL, rU, aU, afU, valChecks, discChecksCar
   );
 }
 
-// ── Ordinamento: più recente in cima, più vecchio in fondo ─────
 function sortNewestFirst<T extends { year_label: string }>(arr: T[]): T[] {
   return [...arr].sort((a, b) => (b.year_label || '').localeCompare(a.year_label || ''));
 }
@@ -417,6 +424,7 @@ export default function DatiPage({ property }: { property: Property }) {
   const [showBreakdownC, setShowBreakdownC] = useState(false);
   const [consumiView, setConsumiView] = useState<'euro'|'qty'>('euro');
   const [pctModal, setPctModal] = useState<PctModalData | null>(null);
+  const [showStorico, setShowStorico] = useState(true);
   const consumiTopRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -454,10 +462,15 @@ export default function DatiPage({ property }: { property: Property }) {
 
   // ── Derived data ─────────────────────────────────────────
   const allYrs = [...new Set([...years.map(y=>y.year_label),...fixed.map(f=>f.year_label),...consumi.map(c=>c.year_label)])].sort();
-  // Aggiungi l'esercizio in corso se non presente
   const allYrsWithCurrent = allYrs.includes(CURRENT_EXERCISE)
     ? allYrs
     : [...allYrs, CURRENT_EXERCISE].sort();
+
+  // Merge anche con gli anni dallo storico PDF
+  const allYrsComplete = [...new Set([
+    ...allYrsWithCurrent,
+    ...Object.keys(TOTALE_GESTIONE_STORICO),
+  ])].sort();
 
   const sfTot = (f: FixedExpenses) => f.prop_casa+f.gen_prop_casa+f.man_ord_casa+f.scale_prop_casa+f.scala_c_casa+f.asc_c_casa+f.prop_alloggi+f.addebiti_unita+f.addebiti_unita_imm+f.spese_personali;
   const sfBox = (f: FixedExpenses) => f.prop_box+f.gen_prop_box+f.man_ord_box+f.scale_prop_box+f.scala_c_box+f.asc_c_box+f.prop_box_extra;
@@ -478,6 +491,17 @@ export default function DatiPage({ property }: { property: Property }) {
     const rateAnno = rates.filter(r=>r.year_label===yl).reduce((s:number,r:any)=>s+(parseFloat(r.importo_casa)||0)+(parseFloat(r.importo_box)||0)+(parseFloat(r.importo_cantina)||0),0);
     const rateCount = rates.filter(r=>r.year_label===yl).length;
     const isCurrent = yl === CURRENT_EXERCISE;
+
+    // Totale gestione: da DB (spese fisse + consumi) oppure da storico PDF
+    const sfTotAll = f ? sfTot(f) + sfBox(f) + sfCant(f) : null;
+    const consTotAll = c ? c.totale_casa + c.totale_box + c.totale_cantina : null;
+    const tgDB = (sfTotAll !== null && consTotAll !== null) ? sfTotAll + consTotAll
+                : (sfTotAll !== null ? sfTotAll : null);
+    const storico = TOTALE_GESTIONE_STORICO[yl];
+    const tgStorico = storico ? storico.c63 + storico.box + storico.cant : null;
+    // Usa DB se disponibile, altrimenti storico PDF
+    const totaleGestione = tgDB ?? tgStorico;
+
     return {
       anno:yl, sf, con, tot: sf!==null&&con!==null?sf+con:sf??con,
       sC, sB, sCa, sTot: sC!==null&&sB!==null&&sCa!==null?sC+sB+sCa:null,
@@ -485,16 +509,55 @@ export default function DatiPage({ property }: { property: Property }) {
       aL,   aCosto:c?.acqua_calda_consumo,   aUnit:aL&&c?.acqua_calda_consumo?c.acqua_calda_consumo/aL:null,
       afL,  afCosto:c?.acqua_potabile,        afUnit:afL&&c?.acqua_potabile?c.acqua_potabile/afL:null,
       rateAnno, rateCount, isCurrent,
+      totaleGestione,
+      tgFromStorico: tgDB === null && tgStorico !== null,
     };
   });
 
-  // Esercizio in corso (usato per confronti)
+  // Dati storici puri (per gli anni senza dati in DB)
+  const riassuntoConStorico = allYrsComplete.map(yl => {
+    const existing = riassunto.find(r => r.anno === yl);
+    if (existing) return existing;
+    const storico = TOTALE_GESTIONE_STORICO[yl];
+    if (storico) {
+      return {
+        anno: yl, sf: null, con: null, tot: null,
+        sC: null, sB: null, sCa: null, sTot: null,
+        rKwh: null, rCosto: undefined, rUnit: null,
+        aL: null, aCosto: undefined, aUnit: null,
+        afL: null, afCosto: undefined, afUnit: null,
+        rateAnno: 0, rateCount: 0, isCurrent: false,
+        totaleGestione: storico.c63 + storico.box + storico.cant,
+        tgFromStorico: true,
+      };
+    }
+    return null;
+  }).filter(Boolean) as typeof riassunto;
+
   const currentRiassunto = riassunto.find(r => r.isCurrent) || riassunto[riassunto.length - 1];
-  // Esercizio precedente rispetto all'in corso
   const prevOfCurrentIdx = riassunto.findIndex(r => r.isCurrent) - 1;
   const prevOfCurrent = prevOfCurrentIdx >= 0 ? riassunto[prevOfCurrentIdx] : null;
 
-  const cData = riassunto.map(r => ({ anno:r.anno, 'Spese fisse':r.sf||0, 'Consumi':r.con||0, 'Totale':r.tot||0, 'Saldo C63':r.sC||0, 'Risc.':r.rCosto||0, 'ACS':r.aCosto||0, 'Acq.fr.':r.afCosto||0 }));
+  const cData = riassunto.map(r => ({
+    anno:r.anno,
+    'Spese fisse':r.sf||0,
+    'Consumi':r.con||0,
+    'Totale':r.tot||0,
+    'Saldo C63':r.sC||0,
+    'Risc.':r.rCosto||0,
+    'ACS':r.aCosto||0,
+    'Acq.fr.':r.afCosto||0,
+  }));
+
+  // Dati per il grafico totale gestione (con storico PDF)
+  const tgChartData = riassuntoConStorico
+    .filter(r => r.totaleGestione !== null && r.totaleGestione !== undefined)
+    .map(r => ({
+      anno: r.anno,
+      'Totale gestione': Math.round(r.totaleGestione! * 100) / 100,
+      storico: r.tgFromStorico,
+    }));
+
   const consumiQtyData = riassunto.map(r => ({ anno:r.anno, 'Riscaldamento (cal)':r.rKwh||0, 'Acqua calda (L)':r.aL||0, 'Acqua fredda (L)':r.afL||0 }));
   const vData = allYrsWithCurrent.slice(1).map((yl,i)=>{
     const cur=cData.find(r=>r.anno===yl)!, prv=cData.find(r=>r.anno===allYrsWithCurrent[i])!;
@@ -502,7 +565,6 @@ export default function DatiPage({ property }: { property: Property }) {
     return { anno:yl, prevAnno:allYrsWithCurrent[i], 'Fisse%':p(cur['Spese fisse'],prv['Spese fisse']), 'Consumi%':p(cur['Consumi'],prv['Consumi']), 'Totale%':p(cur['Totale'],prv['Totale']), isCurrent: yl === CURRENT_EXERCISE };
   });
 
-  // Riassunto in ordine: più recente prima (più vecchio in fondo)
   const riassuntoDesc = sortNewestFirstByAnno(riassunto);
 
   // empties
@@ -511,23 +573,18 @@ export default function DatiPage({ property }: { property: Property }) {
   const emptyC = { property_id:property.id, year_label:CURRENT_EXERCISE, acqua_potabile:0, riscaldamento_involontario:0, riscaldamento_consumo:0, acqua_calda_involontaria:0, acqua_calda_consumo:0, energia_elettrica_box:0, movimenti_personali:0, risc_lettura_iniziale:null, risc_lettura_finale:null, acqua_calda_lettura_iniziale:null, acqua_calda_lettura_finale:null, acqua_fredda_lettura_iniziale:null, acqua_fredda_lettura_finale:null, totale_casa:0, totale_box:0, totale_cantina:0 };
   const emptyR = { property_id:property.id, year_label:CURRENT_EXERCISE, numero_rata:'', data_pagamento:new Date().toISOString().split('T')[0], importo_casa:0, importo_box:0, importo_cantina:0, descrizione:'' };
 
-  // helper per aprire il modal %
   const openPct = (title: string, curLabel: string, curVal: number, prevLabel: string, prevVal: number) => {
     const pctVal = prevVal !== 0 ? (curVal - prevVal) / Math.abs(prevVal) * 100 : 0;
     setPctModal({ title, curLabel, curVal, prevLabel, prevVal, pct: pctVal });
   };
 
-  // ── Card stile per esercizio in corso ─────────────────────
-  const currentCardStyle = {
-    border:'2px solid #f59e0b',
-    background:'#fffdf5',
-  };
+  const currentCardStyle = { border:'2px solid #f59e0b', background:'#fffdf5' };
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
       <TabSelector active={tab} onChange={t=>{setTab(t);setEditY(null);setEditF(null);setEditC(null);setEditR(null);}}/>
 
-      {/* ── Banner esercizio in corso — compact ── */}
+      {/* ── Banner esercizio in corso ── */}
       <div style={{ display:'flex', alignItems:'center', gap:7, padding:'7px 12px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:10 }}>
         <Star size={11} fill="#b45309" color="#b45309"/>
         <span style={{ fontSize:12, fontWeight:700, color:'#b45309' }}>In corso: <strong>{CURRENT_EXERCISE}</strong></span>
@@ -575,7 +632,7 @@ export default function DatiPage({ property }: { property: Property }) {
             </div>
           )}
 
-          {/* Tabella riepilogo — più recente in cima */}
+          {/* Tabella riepilogo */}
           <div style={{ background:'#fff', border:'1px solid var(--border)', borderRadius:14, overflow:'hidden' }}>
             <div style={{ overflowX:'auto' }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
@@ -585,6 +642,7 @@ export default function DatiPage({ property }: { property: Property }) {
                     <th style={{ padding:'8px 10px', textAlign:'right', fontWeight:700, color:'var(--text2)', fontSize:10 }}>Spese fisse</th>
                     <th style={{ padding:'8px 10px', textAlign:'right', fontWeight:700, color:'var(--text2)', fontSize:10 }}>Consumi</th>
                     <th style={{ padding:'8px 10px', textAlign:'right', fontWeight:700, color:'var(--text2)', fontSize:10 }}>Tot. spese</th>
+                    <th style={{ padding:'8px 10px', textAlign:'right', fontWeight:700, color:'#059669', fontSize:10 }}>Tot. gestione¹</th>
                     <th style={{ padding:'8px 10px', textAlign:'right', fontWeight:700, color:'var(--text2)', fontSize:10 }}>Rate versate</th>
                     {!showBreakdownR && <th style={{ padding:'8px 10px', textAlign:'right', fontWeight:700, color:'var(--text2)', fontSize:10 }}>Saldo tot.</th>}
                     {showBreakdownR && <>
@@ -607,7 +665,6 @@ export default function DatiPage({ property }: { property: Property }) {
                             {r.isCurrent && <CurrentBadge/>}
                           </div>
                         </td>
-                        {/* Spese fisse */}
                         <td style={{ padding:'8px 10px', textAlign:'right' }}>
                           {r.sf!=null ? (
                             <>
@@ -623,7 +680,6 @@ export default function DatiPage({ property }: { property: Property }) {
                             </>
                           ) : <span style={{ color:'var(--text3)' }}>—</span>}
                         </td>
-                        {/* Consumi */}
                         <td style={{ padding:'8px 10px', textAlign:'right' }}>
                           {r.con!=null ? (
                             <>
@@ -639,7 +695,6 @@ export default function DatiPage({ property }: { property: Property }) {
                             </>
                           ) : <span style={{ color:'var(--text3)' }}>—</span>}
                         </td>
-                        {/* Tot spese */}
                         <td style={{ padding:'8px 10px', textAlign:'right' }}>
                           {r.tot!=null ? (
                             <>
@@ -655,7 +710,15 @@ export default function DatiPage({ property }: { property: Property }) {
                             </>
                           ) : <span style={{ color:'var(--text3)' }}>—</span>}
                         </td>
-                        {/* Rate versate */}
+                        {/* Totale Gestione (da rendiconto SSA) */}
+                        <td style={{ padding:'8px 10px', textAlign:'right' }}>
+                          {r.totaleGestione != null ? (
+                            <div>
+                              <span style={{ fontWeight:800, color:'#059669' }}>€{f0(r.totaleGestione)}</span>
+                              {r.tgFromStorico && <div style={{ fontSize:9, color:'#6b7280', fontStyle:'italic' }}>da PDF</div>}
+                            </div>
+                          ) : <span style={{ color:'var(--text3)' }}>—</span>}
+                        </td>
                         <td style={{ padding:'8px 10px', textAlign:'right' }}>
                           <span style={{ fontWeight:700, color:'var(--accent)' }}>{r.rateAnno>0?`€${f0(r.rateAnno)}`:'—'}</span>
                           {r.rateCount>0&&<div style={{ fontSize:9, color:'var(--text3)' }}>{r.rateCount} {pluraleRate(r.rateCount)}</div>}
@@ -678,12 +741,24 @@ export default function DatiPage({ property }: { property: Property }) {
                 </tbody>
               </table>
             </div>
+            <div style={{ padding:'6px 10px', borderTop:'1px solid var(--border)', background:'var(--bg3)' }}>
+              <p style={{ fontSize:10, color:'var(--text3)' }}>¹ Tot. gestione = spese fisse + consumi (C63+Box13+Cant10c). Anni senza dati in app: da rendiconto SSA PDF.</p>
+            </div>
           </div>
 
-          {/* Grafico spese totali — con riferimento esercizio in corso */}
+          {/* Grafico spese + curva Totale gestione */}
           <div className="card" style={{ padding:'16px' }}>
-            <p style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>Andamento spese totali</p>
-            <ResponsiveContainer width="100%" height={130}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+              <p style={{ fontWeight:700, fontSize:14 }}>Andamento spese e totale gestione</p>
+              <button onClick={()=>setShowStorico(v=>!v)} style={{
+                display:'inline-flex', alignItems:'center', gap:4, padding:'3px 9px',
+                borderRadius:20, border:'1px solid var(--border)', background: showStorico ? '#ecfdf5' : 'var(--bg2)',
+                color: showStorico ? '#059669' : 'var(--text3)', fontSize:11, fontWeight:600, cursor:'pointer',
+              }}>
+                {showStorico ? '● Tot. gestione' : '○ Tot. gestione'}
+              </button>
+            </div>
+            <ResponsiveContainer width="100%" height={180}>
               <AreaChart data={cData} margin={{ left:-20, right:8, top:4, bottom:0 }}>
                 <XAxis dataKey="anno" tick={{ fill:'#94a3b8', fontSize:11 }} axisLine={false} tickLine={false}/>
                 <YAxis tick={{ fill:'#94a3b8', fontSize:10 }} axisLine={false} tickLine={false} tickFormatter={v=>`€${v}`} width={52}/>
@@ -693,14 +768,57 @@ export default function DatiPage({ property }: { property: Property }) {
                 <Area type="monotone" dataKey="Consumi" stroke="#7c3aed" fill="#f5f3ff" strokeWidth={2} dot={{ fill:'#7c3aed', r:3 }}/>
               </AreaChart>
             </ResponsiveContainer>
+
+            {showStorico && tgChartData.length > 0 && (
+              <>
+                <p style={{ fontSize:11, color:'var(--text3)', marginTop:12, marginBottom:6 }}>Totale gestione reale (C63 + Box 13 + Cantina) — da rendiconto SSA</p>
+                <ResponsiveContainer width="100%" height={130}>
+                  <LineChart data={tgChartData} margin={{ left:-20, right:8, top:4, bottom:0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f2f5"/>
+                    <XAxis dataKey="anno" tick={{ fill:'#94a3b8', fontSize:11 }} axisLine={false} tickLine={false}/>
+                    <YAxis tick={{ fill:'#94a3b8', fontSize:10 }} axisLine={false} tickLine={false} tickFormatter={v=>`€${v}`} width={52}/>
+                    <Tooltip content={<ChartTip/>}/>
+                    <ReferenceLine x={CURRENT_EXERCISE} stroke="#f59e0b" strokeWidth={2} strokeDasharray="4 2"/>
+                    <Line
+                      type="monotone"
+                      dataKey="Totale gestione"
+                      stroke="#059669"
+                      strokeWidth={2.5}
+                      dot={(props: any) => {
+                        const { cx, cy, payload } = props;
+                        return (
+                          <circle
+                            key={`dot-${payload.anno}`}
+                            cx={cx} cy={cy} r={4}
+                            fill={payload.storico ? '#d1fae5' : '#059669'}
+                            stroke="#059669"
+                            strokeWidth={2}
+                          />
+                        );
+                      }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+                <div style={{ display:'flex', gap:12, marginTop:6, flexWrap:'wrap' }}>
+                  <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10, color:'#059669' }}>
+                    <svg width="12" height="12"><circle cx="6" cy="6" r="4" fill="#059669"/></svg>
+                    Da app (DB)
+                  </span>
+                  <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10, color:'#6b7280' }}>
+                    <svg width="12" height="12"><circle cx="6" cy="6" r="4" fill="#d1fae5" stroke="#059669" strokeWidth="2"/></svg>
+                    Da rendiconto PDF
+                  </span>
+                </div>
+              </>
+            )}
           </div>
 
-          {/* Variazioni % — confronto sempre con esercizio in corso */}
+          {/* Variazioni % */}
           {vData.length > 0 && (
             <div className="card">
               <p style={{ fontWeight:700, fontSize:14, marginBottom:6 }}>Variazioni anno su anno</p>
               <p style={{ fontSize:11, color:'var(--text3)', marginBottom:8 }}>
-                Tocca una % per vedere il dettaglio · Le variazioni verso <strong>{CURRENT_EXERCISE}</strong> sono evidenziate
+                Tocca una % per vedere il dettaglio
               </p>
               <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                 {vData.map(r => {
@@ -734,7 +852,7 @@ export default function DatiPage({ property }: { property: Property }) {
             </div>
           )}
 
-          {/* Confronto diretto esercizio in corso vs precedente */}
+          {/* Confronto in corso vs precedente */}
           {currentRiassunto && prevOfCurrent && (
             <div className="card" style={{ border:'1px solid #fde68a', background:'#fffdf5' }}>
               <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:12 }}>
@@ -746,9 +864,10 @@ export default function DatiPage({ property }: { property: Property }) {
                   ['Spese fisse', currentRiassunto.sf, prevOfCurrent.sf, 'Spese fisse'],
                   ['Consumi', currentRiassunto.con, prevOfCurrent.con, 'Consumi'],
                   ['Tot. spese', currentRiassunto.tot, prevOfCurrent.tot, 'Totale spese'],
+                  ['Tot. gestione', currentRiassunto.totaleGestione, prevOfCurrent.totaleGestione, 'Totale gestione'],
                   ['Rate versate', currentRiassunto.rateAnno, prevOfCurrent.rateAnno, 'Rate versate'],
-                ] as [string, number|null, number|null, string][]).map(([l, cur, prv, field]) => {
-                  if (cur === null || prv === null || prv === 0) return null;
+                ] as [string, number|null|undefined, number|null|undefined, string][]).map(([l, cur, prv, field]) => {
+                  if (cur == null || prv == null || prv === 0) return null;
                   const d = pct(cur, prv);
                   const up = cur > prv;
                   return (
@@ -768,7 +887,7 @@ export default function DatiPage({ property }: { property: Property }) {
             </div>
           )}
 
-          {/* Costi unitari consumi nel tempo */}
+          {/* Costi unitari */}
           {riassunto.some(r=>r.rUnit) && (
             <div style={{ background:'#fff', border:'1px solid var(--border)', borderRadius:14, overflow:'hidden' }}>
               <div style={{ padding:'10px 14px 8px', borderBottom:'1px solid var(--border)', background:'var(--bg3)' }}>
@@ -778,14 +897,13 @@ export default function DatiPage({ property }: { property: Property }) {
                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
                   <thead>
                     <tr style={{ background:'var(--bg3)' }}>
-                      {['Anno','Risc. (cal)','€/cal Δ','ACS (L)','€/L Δ','Acq.fr. (L)','€/L Δ'].map(h=>(
+                      {['Anno','Risc. cal','€/cal Δ','ACS L','€/L Δ','Acq.fr. L','€/L Δ'].map(h=>(
                         <th key={h} style={{ padding:'6px 10px', textAlign:'right', fontWeight:700, color:'var(--text2)', fontSize:10 }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {sortNewestFirstByAnno(riassunto.filter(r=>r.rKwh)).map((r,i,arr)=>{
-                      const prv = arr[i+1]; // arr è già desc, quindi prv è il precedente (più vecchio)
+                    {sortNewestFirstByAnno(riassunto.filter(r=>r.rKwh)).map((r,_i,_arr)=>{
                       const prvReal = riassunto[riassunto.findIndex(x=>x.anno===r.anno)-1];
                       return (
                         <tr key={r.anno} style={{ borderBottom:'1px solid var(--border)', background: r.isCurrent ? '#fffdf5' : undefined, borderLeft: r.isCurrent ? '3px solid #f59e0b' : 'none' }}>
@@ -841,7 +959,7 @@ export default function DatiPage({ property }: { property: Property }) {
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
           <SectionHeader title="Rendiconto annuale" sub="Saldo = Inizio + Rate − Spese" onAdd={()=>{setEditY({...emptyY});setIsNew(true);}}/>
           <div style={{ background:'var(--blue-bg)', border:'1px solid #bfdbfe', borderRadius:10, padding:'10px 12px', fontSize:12, color:'var(--blue)' }}>
-            Inserisci i dati <strong>una volta l'anno</strong> quando ricevi il rendiconto SSA (ottobre/novembre). L'esercizio in corso è <strong>{CURRENT_EXERCISE}</strong>.
+            Inserisci i dati <strong>una volta l'anno</strong> quando ricevi il rendiconto SSA. Esercizio in corso: <strong>{CURRENT_EXERCISE}</strong>.
           </div>
           {editY && (
             <div className="card" style={{ border:'2px solid var(--accent)' }}>
@@ -865,7 +983,7 @@ export default function DatiPage({ property }: { property: Property }) {
                   </div>
                 </div>
                 <div style={{ background:'var(--bg3)', borderRadius:10, padding:12 }}>
-                  <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', marginBottom:8 }}>Spese totali (Totale gestione dal riparto)</p>
+                  <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', marginBottom:8 }}>Spese totali (dal riparto)</p>
                   <div className="grid3">
                     <NF lbl="App C63" fld="spese_totali_casa" st={editY} fn={numY}/>
                     <NF lbl="Box 13"  fld="spese_totali_box"  st={editY} fn={numY}/>
@@ -876,7 +994,6 @@ export default function DatiPage({ property }: { property: Property }) {
               </div>
             </div>
           )}
-          {/* Ordinamento: più recente in cima */}
           {sortNewestFirst(years).map((y) => {
             const sC=calcSaldo(y.balance_start_casa,y.rates_paid_casa,y.spese_totali_casa||0);
             const sB=calcSaldo(y.balance_start_box,y.rates_paid_box,y.spese_totali_box||0);
@@ -939,9 +1056,6 @@ export default function DatiPage({ property }: { property: Property }) {
           <div style={{ display:'flex', justifyContent:'flex-end' }}>
             <ToggleBreakdown show={showBreakdownS} onToggle={()=>setShowBreakdownS(v=>!v)}/>
           </div>
-          <div style={{ background:'var(--blue-bg)', border:'1px solid #bfdbfe', borderRadius:10, padding:'10px 12px', fontSize:12, color:'var(--blue)' }}>
-            Inserisci <strong>una volta l'anno</strong> copiando i valori dal documento "Riparto Consuntivo" SSA. Anno in corso: <strong>{CURRENT_EXERCISE}</strong>.
-          </div>
           {editF && (
             <div className="card" style={{ border:'2px solid var(--accent)' }}>
               <p style={{ fontFamily:'var(--font-display)', fontWeight:800, fontSize:16, marginBottom:12 }}>{isNew?`Nuovo anno (${CURRENT_EXERCISE})`:`Modifica ${editF.year_label}`}</p>
@@ -966,13 +1080,10 @@ export default function DatiPage({ property }: { property: Property }) {
               </div>
             </div>
           )}
-          {/* Più recente in cima */}
           {sortNewestFirst(fixed).map((r,i,arr) => {
             const tC=sfTot(r), tB=sfBox(r), tCa=sfCant(r), tot=tC+tB+tCa;
-            // Confronto con esercizio in corso se non è già l'in corso
             const isCurrent = r.year_label === CURRENT_EXERCISE;
-            const prvFixed = !isCurrent ? fixed.find(x=>x.year_label===CURRENT_EXERCISE) : null;
-            const prvForDelta = arr[i+1]; // anno precedente nella lista (più vecchio, i+1 perché desc)
+            const prvForDelta = arr[i+1];
             const prvTot = prvForDelta ? sfTot(prvForDelta)+sfBox(prvForDelta)+sfCant(prvForDelta) : null;
             const isExp=expF===r.id;
             return (
@@ -1084,67 +1195,6 @@ export default function DatiPage({ property }: { property: Property }) {
             </ResponsiveContainer>
           </div>
 
-          {/* Tabella costi unitari storica — più recente in cima */}
-          {riassunto.some(r=>r.rUnit) && (
-            <div style={{ background:'#fff', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden' }}>
-              <div style={{ padding:'8px 12px', background:'var(--bg3)', borderBottom:'1px solid var(--border)' }}>
-                <p style={{ fontWeight:700, fontSize:12 }}>Costo unitario e quantità — storico</p>
-              </div>
-              <div style={{ overflowX:'auto' }}>
-                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
-                  <thead>
-                    <tr style={{ background:'var(--bg3)' }}>
-                      <th style={{ padding:'6px 10px', textAlign:'left', fontWeight:700, color:'var(--text2)', fontSize:10 }}>Anno</th>
-                      <th style={{ padding:'6px 10px', textAlign:'right', fontWeight:700, color:'#ef4444', fontSize:10 }}>Risc. cal</th>
-                      <th style={{ padding:'6px 10px', textAlign:'right', fontWeight:700, color:'#ef4444', fontSize:10 }}>€/cal Δ</th>
-                      <th style={{ padding:'6px 10px', textAlign:'right', fontWeight:700, color:'#f97316', fontSize:10 }}>ACS L</th>
-                      <th style={{ padding:'6px 10px', textAlign:'right', fontWeight:700, color:'#f97316', fontSize:10 }}>€/L Δ</th>
-                      <th style={{ padding:'6px 10px', textAlign:'right', fontWeight:700, color:'#3b82f6', fontSize:10 }}>Acq.fr. L</th>
-                      <th style={{ padding:'6px 10px', textAlign:'right', fontWeight:700, color:'#3b82f6', fontSize:10 }}>€/L Δ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortNewestFirstByAnno(riassunto.filter(r=>r.rKwh||r.aL||r.afL)).map((r,i,arr)=>{
-                      // Confronto con anno precedente nella sequenza
-                      const prvReal = riassunto[riassunto.findIndex(x=>x.anno===r.anno)-1];
-                      const cell = (val: number|null, prvVal: number|null, col: string, label: string) => (
-                        <td style={{ padding:'6px 10px', textAlign:'right' }}>
-                          {val ? (
-                            <>
-                              <span style={{ fontWeight:700, color:col }}>{f2(val)}</span>
-                              {prvVal && (
-                                <button onClick={()=>openPct(label,r.anno,val,prvReal.anno,prvVal)}
-                                  style={{ display:'block', fontSize:9, fontWeight:700, color:val>prvVal?'var(--red)':'var(--green)', background:'transparent', border:'none', cursor:'pointer', padding:0, textDecoration:'underline dotted' }}>
-                                  {val>prvVal?'▲':'▼'}{Math.abs(pct(val,prvVal)).toFixed(1)}%
-                                </button>
-                              )}
-                            </>
-                          ) : <span style={{ color:'var(--text3)' }}>—</span>}
-                        </td>
-                      );
-                      return (
-                        <tr key={r.anno} style={{ borderBottom:'1px solid var(--border)', background: r.isCurrent ? '#fffdf5' : undefined, borderLeft: r.isCurrent ? '3px solid #f59e0b' : 'none' }}>
-                          <td style={{ padding:'6px 10px' }}>
-                            <div style={{ display:'flex', alignItems:'center', gap:4 }}>
-                              <span className="tag tag-blue">{r.anno}</span>
-                              {r.isCurrent && <CurrentBadge/>}
-                            </div>
-                          </td>
-                          <td style={{ padding:'6px 10px', textAlign:'right', fontWeight:600 }}>{fN(r.rKwh)}</td>
-                          {cell(r.rUnit||null, prvReal?.rUnit||null, '#ef4444', 'Costo unitario riscaldamento')}
-                          <td style={{ padding:'6px 10px', textAlign:'right', fontWeight:600 }}>{fN(r.aL)}</td>
-                          {cell(r.aUnit||null, prvReal?.aUnit||null, '#f97316', 'Costo unitario ACS')}
-                          <td style={{ padding:'6px 10px', textAlign:'right', fontWeight:600 }}>{fN(r.afL)}</td>
-                          {cell(r.afUnit||null, prvReal?.afUnit||null, '#3b82f6', 'Costo unitario acqua fredda')}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
           {editC && (
             <div className="card" style={{ border:'2px solid var(--accent)' }}>
               <p style={{ fontFamily:'var(--font-display)', fontWeight:800, fontSize:16, marginBottom:12 }}>{isNew?`Nuovo anno (${CURRENT_EXERCISE})`:`Modifica ${editC.year_label}`}</p>
@@ -1186,8 +1236,7 @@ export default function DatiPage({ property }: { property: Property }) {
             </div>
           )}
 
-          {/* Più recente in cima */}
-          {sortNewestFirst(consumi).map((r,i,arr) => {
+          {sortNewestFirst(consumi).map((r,_i,_arr) => {
             const tot=r.totale_casa+r.totale_box+r.totale_cantina;
             const prvReal = riassunto[riassunto.findIndex(x=>x.anno===r.year_label)-1];
             const prvTot=prvReal?prvReal.con:null;
@@ -1279,11 +1328,9 @@ export default function DatiPage({ property }: { property: Property }) {
       {tab==='Rate' && (
         <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
           <SectionHeader title="Rate pagate" sub={`${rates.length} pagamenti totali`} onAdd={()=>{setEditR({...emptyR});setIsNew(true);}}/>
-
           <div style={{ display:'flex', justifyContent:'flex-end' }}>
             <ToggleBreakdown show={showBreakdownR} onToggle={()=>setShowBreakdownR(v=>!v)}/>
           </div>
-
           {allYrsWithCurrent.some(yl=>rates.some(r=>r.year_label===yl)) && (
             <div className="card">
               <p style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>Rate versate per anno</p>
@@ -1299,7 +1346,6 @@ export default function DatiPage({ property }: { property: Property }) {
               </ResponsiveContainer>
             </div>
           )}
-
           {editR && (
             <div className="card" style={{ border:'2px solid var(--accent)' }}>
               <p style={{ fontFamily:'var(--font-display)', fontWeight:800, fontSize:16, marginBottom:12 }}>{isNew?'Nuovo pagamento':'Modifica pagamento'}</p>
@@ -1338,8 +1384,6 @@ export default function DatiPage({ property }: { property: Property }) {
               </div>
             </div>
           )}
-
-          {/* Più recente in cima — esercizio in corso evidenziato */}
           {[...allYrsWithCurrent].sort((a,b)=>b.localeCompare(a)).map(yl => {
             const rAnno = rates.filter(r=>r.year_label===yl);
             const isCurrent = yl === CURRENT_EXERCISE;
@@ -1349,7 +1393,6 @@ export default function DatiPage({ property }: { property: Property }) {
             const totCa = rAnno.reduce((s:number,r:any)=>s+(parseFloat(r.importo_cantina)||0),0);
             const totAll = totC+totB+totCa;
             const yData = years.find(y=>y.year_label===yl);
-            // Per l'esercizio in corso senza rendiconto usa il totale preventivo (spese fisse stimate)
             const PV_TOTAL = Object.values(PV).reduce((s,v)=>s+v,0);
             const atteso = yData
               ? yData.rates_paid_casa+yData.rates_paid_box+yData.rates_paid_cantina
@@ -1370,16 +1413,15 @@ export default function DatiPage({ property }: { property: Property }) {
                     </p>
                     {rAnno.length > 0 && <p style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>{rAnno.length} {pluraleRate(rAnno.length)} · media €{fa(avgRata)} cad.</p>}
                   </div>
-                  <div style={{ textAlign:'right' }}>
-                    <p style={{ fontSize:11, color:'var(--text3)' }}>Totale (App+Box+Cant)</p>
-                    {showBreakdownR && totAll > 0 && (
+                  {showBreakdownR && totAll > 0 && (
+                    <div style={{ textAlign:'right' }}>
                       <div style={{ display:'flex', gap:8, marginTop:4, justifyContent:'flex-end', flexWrap:'wrap' }}>
                         {([['App',totC,'#16a34a'],['Box',totB,'#2563eb'],['Cant.',totCa,'#d97706']] as [string,number,string][]).map(([l,v,c])=>(
                           <span key={l} style={{ fontSize:11, fontWeight:700, color:c }}>{l}: €{fa(v)}</span>
                         ))}
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
                 {atteso !== null && totAll > 0 && (
                   <div style={{ background:ok?'var(--green-bg)':'var(--amber-bg)', border:`1px solid ${ok?'#bbf7d0':'#fde68a'}`, borderRadius:8, padding:'6px 10px', fontSize:12, marginBottom:10, fontWeight:600, color:ok?'var(--green)':'var(--amber)', display:'flex', alignItems:'center', gap:6 }}>
@@ -1460,17 +1502,18 @@ export default function DatiPage({ property }: { property: Property }) {
           f0={f0}
           f2={f2}
           pct={pct}
+          totaleGestioneStorico={TOTALE_GESTIONE_STORICO}
         />
       )}
 
-      {/* ── Modal dettaglio % ── */}
+      {/* ── Modal % ── */}
       {pctModal && <PctModal {...pctModal} onClose={() => setPctModal(null)} />}
     </div>
   );
 }
 
 // ══════════════════════════════════════════════════════════════
-// ConfriontoTab — Preventivo vs Consuntivo, tutti gli anni + in corso
+// ConfriontoTab
 // ══════════════════════════════════════════════════════════════
 type PrevRow = { l: string; prev: number; diff: string; getCons: (f: any, c: any, rateAnno: number) => number | null };
 
@@ -1495,30 +1538,124 @@ const PREVENTIVI: Record<string, { rows: PrevRow[]; pvRate: number; note: string
     ],
   },
   '24/25': {
-    pvRate: 172.03+533.36+16.97+13.36+18.96+16.97+17.59,
-    note: 'Budget SSA ottobre 2024',
+    pvRate: 172.03+533.36+16.97+13.36+18.96+16.97+17.59+5.17+0+0+70.45+0,
+    note: 'Budget SSA ottobre 2024 (stima)',
     rows: [
-      { l:'Spese Proprietà',  prev:172.03, diff:'50.687 × 3,394‰', getCons:(f:any)=>f?.prop_casa??null },
-      { l:'Spese Generali',   prev:533.36, diff:'157.146 × 3,394‰', getCons:(f:any)=>f?.gen_prop_casa??null },
-      { l:'Man. Ordinarie',   prev:16.97,  diff:'5.000 × 3,394‰', getCons:(f:any)=>f?.man_ord_casa??null },
-      { l:'Scala C',          prev:13.36,  diff:'scale + gestione', getCons:(f:any)=>f?(f.scale_prop_casa+f.scala_c_casa):null },
-      { l:'Ascensore C',      prev:18.96,  diff:'ascensore C', getCons:(f:any)=>f?.asc_c_casa??null },
-      { l:'Prop. alloggi',    prev:16.97,  diff:'solo alloggi/negozi', getCons:(f:any)=>f?.prop_alloggi??null },
-      { l:'Teleletture',      prev:17.59,  diff:'5.186 × 3,394‰', getCons:(f:any)=>f?.addebiti_unita_imm??null },
-      { l:'Mov. personali',   prev:0,      diff:'cert. + addebiti', getCons:(f:any)=>f?.spese_personali??null },
-      { l:'Rate versate',     prev:789.21, diff:'totale preventivo 24/25', getCons:(_f:any,_c:any,r:number)=>r>0?r:null },
+      { l:'Spese Proprietà',    prev:172.03, diff:'50.687 × 3,394‰', getCons:(f:any)=>f?.prop_casa??null },
+      { l:'Spese Generali',     prev:533.36, diff:'157.146 × 3,394‰', getCons:(f:any)=>f?.gen_prop_casa??null },
+      { l:'Man. Ordinarie',     prev:16.97,  diff:'5.000 × 3,394‰', getCons:(f:any)=>f?.man_ord_casa??null },
+      { l:'Scala C',            prev:13.36,  diff:'scale + gestione', getCons:(f:any)=>f?(f.scale_prop_casa+f.scala_c_casa):null },
+      { l:'Ascensore C',        prev:18.96,  diff:'ascensore C', getCons:(f:any)=>f?.asc_c_casa??null },
+      { l:'Prop. alloggi',      prev:16.97,  diff:'solo alloggi/negozi', getCons:(f:any)=>f?.prop_alloggi??null },
+      { l:'Teleletture',        prev:17.59,  diff:'5.186 × 3,394‰', getCons:(f:any)=>f?.addebiti_unita_imm??null },
+      { l:'Energia box',        prev:70.45,  diff:'stima', getCons:(_f:any,c:any)=>c?.energia_elettrica_box??null },
+      { l:'Risc. consumo',      prev:0, diff:'da contatore', getCons:(_f:any,c:any)=>c?.riscaldamento_consumo??null },
+      { l:'ACS consumo',        prev:0, diff:'da contatore', getCons:(_f:any,c:any)=>c?.acqua_calda_consumo??null },
+      { l:'Acqua potabile',     prev:0, diff:'da contatore', getCons:(_f:any,c:any)=>c?.acqua_potabile??null },
+      { l:'Mov. personali',     prev:0, diff:'cert. + addebiti', getCons:(f:any)=>f?.spese_personali??null },
+      { l:'Rate versate',       prev:789.21, diff:'totale preventivo 24/25', getCons:(_f:any,_c:any,r:number)=>r>0?r:null },
+    ],
+  },
+  '23/24': {
+    pvRate: 160.00+491.00+16.97+12.00+17.00+16.97+16.00+65.00+0+0+0+0,
+    note: 'Budget SSA ottobre 2023 (da millesimi × totali condominio)',
+    rows: [
+      { l:'Spese Proprietà',    prev:160.00, diff:'47.104 × 3,394‰', getCons:(f:any)=>f?.prop_casa??null },
+      { l:'Spese Generali',     prev:491.00, diff:'144.659 × 3,394‰', getCons:(f:any)=>f?.gen_prop_casa??null },
+      { l:'Man. Ordinarie',     prev:16.97,  diff:'5.000 × 3,394‰', getCons:(f:any)=>f?.man_ord_casa??null },
+      { l:'Scala C',            prev:12.00,  diff:'scale + gestione', getCons:(f:any)=>f?(f.scale_prop_casa+f.scala_c_casa):null },
+      { l:'Ascensore C',        prev:17.00,  diff:'ascensore C', getCons:(f:any)=>f?.asc_c_casa??null },
+      { l:'Prop. alloggi',      prev:16.97,  diff:'solo alloggi/negozi', getCons:(f:any)=>f?.prop_alloggi??null },
+      { l:'Teleletture',        prev:16.00,  diff:'4.715 × 3,394‰', getCons:(f:any)=>f?.addebiti_unita_imm??null },
+      { l:'Energia box',        prev:65.00,  diff:'stima', getCons:(_f:any,c:any)=>c?.energia_elettrica_box??null },
+      { l:'Risc. consumo',      prev:0, diff:'da contatore', getCons:(_f:any,c:any)=>c?.riscaldamento_consumo??null },
+      { l:'ACS consumo',        prev:0, diff:'da contatore', getCons:(_f:any,c:any)=>c?.acqua_calda_consumo??null },
+      { l:'Acqua potabile',     prev:0, diff:'da contatore', getCons:(_f:any,c:any)=>c?.acqua_potabile??null },
+      { l:'Mov. personali',     prev:0, diff:'cert. + addebiti', getCons:(f:any)=>f?.spese_personali??null },
+      { l:'Rate versate',       prev:794.94, diff:'media rate 23/24', getCons:(_f:any,_c:any,r:number)=>r>0?r:null },
+    ],
+  },
+  '22/23': {
+    pvRate: 150.00+458.00+13.60+11.00+15.50+13.60+14.50+60.00+0+0+0+130.00,
+    note: 'Da rendiconto SSA — C63: tot.gest.=1.657,43 | Box:137,76 | Cant:13,29',
+    rows: [
+      { l:'Spese Proprietà',    prev:150.00, diff:'44.200 × 3,394‰', getCons:(f:any)=>f?.prop_casa??null },
+      { l:'Spese Generali',     prev:458.00, diff:'134.960 × 3,394‰', getCons:(f:any)=>f?.gen_prop_casa??null },
+      { l:'Man. Ordinarie',     prev:13.60,  diff:'4.008 × 3,394‰', getCons:(f:any)=>f?.man_ord_casa??null },
+      { l:'Scala C',            prev:11.00,  diff:'scale + gestione', getCons:(f:any)=>f?(f.scale_prop_casa+f.scala_c_casa):null },
+      { l:'Ascensore C',        prev:15.50,  diff:'ascensore C', getCons:(f:any)=>f?.asc_c_casa??null },
+      { l:'Prop. alloggi',      prev:13.60,  diff:'solo alloggi/negozi', getCons:(f:any)=>f?.prop_alloggi??null },
+      { l:'Teleletture',        prev:14.50,  diff:'addebiti imm.', getCons:(f:any)=>f?.addebiti_unita_imm??null },
+      { l:'Energia box',        prev:60.00,  diff:'energia el. box', getCons:(_f:any,c:any)=>c?.energia_elettrica_box??null },
+      { l:'Risc. consumo',      prev:0, diff:'da contatore', getCons:(_f:any,c:any)=>c?.riscaldamento_consumo??null },
+      { l:'ACS consumo',        prev:0, diff:'da contatore', getCons:(_f:any,c:any)=>c?.acqua_calda_consumo??null },
+      { l:'Acqua potabile',     prev:0, diff:'da contatore', getCons:(_f:any,c:any)=>c?.acqua_potabile??null },
+      { l:'Mov. personali',     prev:130.00, diff:'movimenti cert.', getCons:(f:any)=>f?.spese_personali??null },
+      { l:'Tot. gestione',      prev:1808.48, diff:'da PDF (C63+Box+Cant)', getCons:(_f:any,_c:any,r:number)=>r>0?r:null },
+    ],
+  },
+  '21/22': {
+    pvRate: 0,
+    note: 'Da rendiconto SSA — C63: 1.285,55 | Box: 164,16 | Cant: 12,89 = Tot. 1.462,60',
+    rows: [
+      { l:'Spese Proprietà',    prev:140.00, diff:'41.250 × 3,394‰', getCons:(f:any)=>f?.prop_casa??null },
+      { l:'Spese Generali',     prev:430.00, diff:'126.723 × 3,394‰', getCons:(f:any)=>f?.gen_prop_casa??null },
+      { l:'Man. Ordinarie',     prev:10.00,  diff:'manutenzioni', getCons:(f:any)=>f?.man_ord_casa??null },
+      { l:'Scala C',            prev:9.00,   diff:'scale + gestione', getCons:(f:any)=>f?(f.scale_prop_casa+f.scala_c_casa):null },
+      { l:'Ascensore C',        prev:14.00,  diff:'ascensore C', getCons:(f:any)=>f?.asc_c_casa??null },
+      { l:'Risc. consumo',      prev:0, diff:'da contatore', getCons:(_f:any,c:any)=>c?.riscaldamento_consumo??null },
+      { l:'ACS consumo',        prev:0, diff:'da contatore', getCons:(_f:any,c:any)=>c?.acqua_calda_consumo??null },
+      { l:'Acqua potabile',     prev:0, diff:'da contatore', getCons:(_f:any,c:any)=>c?.acqua_potabile??null },
+      { l:'Mov. personali',     prev:0, diff:'cert. + addebiti', getCons:(f:any)=>f?.spese_personali??null },
+      { l:'Tot. gestione',      prev:1462.60, diff:'da PDF (C63+Box+Cant)', getCons:(_f:any,_c:any,r:number)=>r>0?r:null },
+    ],
+  },
+  '20/21': {
+    pvRate: 0,
+    note: 'Da rendiconto SSA — C63: 1.258,84 | Box: 147,35 | Cant: 11,69 = Tot. 1.417,88',
+    rows: [
+      { l:'Spese Proprietà',    prev:120.00, diff:'35.364 × 3,394‰', getCons:(f:any)=>f?.prop_casa??null },
+      { l:'Spese Generali',     prev:400.00, diff:'117.856 × 3,394‰', getCons:(f:any)=>f?.gen_prop_casa??null },
+      { l:'Man. Ordinarie',     prev:9.00,   diff:'manutenzioni', getCons:(f:any)=>f?.man_ord_casa??null },
+      { l:'Scala C',            prev:7.00,   diff:'scale + gestione', getCons:(f:any)=>f?(f.scale_prop_casa+f.scala_c_casa):null },
+      { l:'Ascensore C',        prev:12.00,  diff:'ascensore C', getCons:(f:any)=>f?.asc_c_casa??null },
+      { l:'Risc. consumo',      prev:0, diff:'da contatore', getCons:(_f:any,c:any)=>c?.riscaldamento_consumo??null },
+      { l:'ACS consumo',        prev:0, diff:'da contatore', getCons:(_f:any,c:any)=>c?.acqua_calda_consumo??null },
+      { l:'Acqua potabile',     prev:0, diff:'da contatore', getCons:(_f:any,c:any)=>c?.acqua_potabile??null },
+      { l:'Mov. personali',     prev:0, diff:'cert. + addebiti', getCons:(f:any)=>f?.spese_personali??null },
+      { l:'Tot. gestione',      prev:1417.88, diff:'da PDF (C63+Box+Cant)', getCons:(_f:any,_c:any,r:number)=>r>0?r:null },
+    ],
+  },
+  '19/20': {
+    pvRate: 0,
+    note: 'Da rendiconto SSA — C63: 682,05 | Box: 113,59 | Cant: 8,03 = Tot. 803,67',
+    rows: [
+      { l:'Spese Proprietà',    prev:113.92, diff:'33.564 × 3,394‰', getCons:(f:any)=>f?.prop_casa??null },
+      { l:'Spese Generali',     prev:312.12, diff:'91.970 × 3,394‰', getCons:(f:any)=>f?.gen_prop_casa??null },
+      { l:'Man. Ordinarie',     prev:30.28,  diff:'manutenzione scale', getCons:(f:any)=>f?.man_ord_casa??null },
+      { l:'Ascensore C',        prev:7.15,   diff:'ascensore C', getCons:(f:any)=>f?.asc_c_casa??null },
+      { l:'Risc. consumo',      prev:73.79, diff:'da contatore (314 lett, 59,27€ ACS)', getCons:(_f:any,c:any)=>c?.riscaldamento_consumo??null },
+      { l:'ACS consumo',        prev:59.27, diff:'da contatore', getCons:(_f:any,c:any)=>c?.acqua_calda_consumo??null },
+      { l:'Acqua potabile',     prev:0, diff:'da contatore', getCons:(_f:any,c:any)=>c?.acqua_potabile??null },
+      { l:'Mov. personali',     prev:0, diff:'cert. + addebiti', getCons:(f:any)=>f?.spese_personali??null },
+      { l:'Tot. gestione',      prev:803.67, diff:'da PDF (C63+Box+Cant)', getCons:(_f:any,_c:any,r:number)=>r>0?r:null },
     ],
   },
 };
 
-function ConfriontoTab({ allYrs, fixed, consumi, rates, currentExercise, openPct, fa, f0: _f0, f2: _f2, pct }: {
+function ConfriontoTab({ allYrs, fixed, consumi, rates, currentExercise, openPct, fa, f0: _f0, f2: _f2, pct, totaleGestioneStorico }: {
   allYrs: string[]; fixed: FixedExpenses[]; consumi: ConsumptionData[]; rates: any[];
   currentExercise: string;
   PV: typeof PV; P2526: typeof P2526;
   openPct: (title: string, curLabel: string, curVal: number, prevLabel: string, prevVal: number) => void;
   fa:(n:number)=>string; f0:(n:number)=>string; f2:(n:number)=>string; pct:(c:number,p:number)=>number;
+  totaleGestioneStorico: Record<string, { c63: number; box: number; cant: number }>;
 }) {
-  const anniConPreventivo = [...allYrs].filter(yl=>PREVENTIVI[yl]).sort((a,b)=>b.localeCompare(a));
+  const anniConPreventivo = [...allYrs, ...Object.keys(PREVENTIVI)]
+    .filter((v,i,a)=>a.indexOf(v)===i)
+    .filter(yl=>PREVENTIVI[yl])
+    .sort((a,b)=>b.localeCompare(a));
+
   const [selectedAnno, setSelectedAnno] = useState<string>(
     currentExercise in PREVENTIVI ? currentExercise : (anniConPreventivo[0]||'')
   );
@@ -1537,6 +1674,9 @@ function ConfriontoTab({ allYrs, fixed, consumi, rates, currentExercise, openPct
     .reduce((s:number,r:any)=>s+(parseFloat(r.importo_casa)||0)+(parseFloat(r.importo_box)||0)+(parseFloat(r.importo_cantina)||0),0);
   const pvDef = PREVENTIVI[selectedAnno];
   const isCurrent = selectedAnno === currentExercise;
+  // Totale gestione da storico PDF per questo anno
+  const tgStorico = totaleGestioneStorico[selectedAnno];
+  const tgStoricoTot = tgStorico ? tgStorico.c63 + tgStorico.box + tgStorico.cant : null;
 
   const rows = pvDef.rows.map(r=>({ ...r, cons: r.getCons(fData, cData, rateAnno) }));
   const tP = rows.reduce((s,r)=>s+r.prev,0);
@@ -1568,10 +1708,21 @@ function ConfriontoTab({ allYrs, fixed, consumi, rates, currentExercise, openPct
       <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:isCurrent?'#fffbeb':'var(--bg3)', border:`1px solid ${isCurrent?'#fde68a':'var(--border)'}`, borderRadius:10 }}>
         {isCurrent && <Star size={12} fill="#b45309" color="#b45309"/>}
         <span style={{ fontSize:12, fontWeight:700, color:isCurrent?'#b45309':'var(--text2)' }}>
-          Esercizio <strong>{selectedAnno}</strong>{isCurrent?' — in corso':' — chiuso'}
+          <strong>{selectedAnno}</strong>{isCurrent?' — in corso':' — chiuso'}
         </span>
         <span style={{ fontSize:11, color:'var(--text3)', marginLeft:4 }}>{pvDef.note}</span>
       </div>
+
+      {/* Badge totale gestione storico */}
+      {tgStoricoTot && (
+        <div style={{ background:'#ecfdf5', border:'1px solid #a7f3d0', borderRadius:10, padding:'8px 12px', fontSize:12, color:'#059669', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <span style={{ fontWeight:700 }}>📋 Tot. gestione SSA (da PDF)</span>
+          <div style={{ textAlign:'right' }}>
+            <span style={{ fontWeight:800, fontSize:14 }}>€{fa(tgStoricoTot)}</span>
+            {tgStorico && <div style={{ fontSize:10, color:'#6b7280' }}>C63 €{fa(tgStorico.c63)} · Box €{fa(tgStorico.box)} · Cant €{fa(tgStorico.cant)}</div>}
+          </div>
+        </div>
+      )}
 
       {isCurrent && rateAnno>0 && (
         <div style={{ background:'var(--green-bg)', border:'1px solid #a7f3d0', borderRadius:10, padding:'8px 12px', fontSize:12, color:'var(--green)', display:'flex', justifyContent:'space-between' }}>
@@ -1585,7 +1736,7 @@ function ConfriontoTab({ allYrs, fixed, consumi, rates, currentExercise, openPct
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
             <thead>
               <tr style={{ background:'var(--bg3)' }}>
-                {['Voce','Preventivo','Consuntivo','Δ €','Δ %'].map(h=>(
+                {['Voce','Preventivo / SSA','Consuntivo DB','Δ €','Δ %'].map(h=>(
                   <th key={h} style={{ padding:'8px 10px', textAlign: h==='Voce'?'left':'right', fontWeight:700, color:'var(--text2)', fontSize:10, whiteSpace:'nowrap' as const }}>{h}</th>
                 ))}
               </tr>
@@ -1611,7 +1762,7 @@ function ConfriontoTab({ allYrs, fixed, consumi, rates, currentExercise, openPct
                     </td>
                     <td style={{ padding:'8px 10px', textAlign:'right' }}>
                       {hasC&&r.prev>0?(
-                        <button onClick={()=>openPct(`${r.l} — ${selectedAnno}`,`Consuntivo ${selectedAnno}`,cons,`Preventivo ${selectedAnno}`,r.prev)}
+                        <button onClick={()=>openPct(`${r.l} — ${selectedAnno}`,`Consuntivo ${selectedAnno}`,cons,`SSA ${selectedAnno}`,r.prev)}
                           style={{ fontWeight:700, color:dp>0?'var(--red)':'var(--green)', background:dp>0?'var(--red-bg)':'var(--green-bg)', border:'none', borderRadius:5, padding:'2px 7px', fontSize:11, cursor:'pointer', textDecoration:'underline dotted' }}>
                           {dp>=0?'+':'-'}{Math.abs(dp).toFixed(1)}%
                         </button>
@@ -1631,7 +1782,7 @@ function ConfriontoTab({ allYrs, fixed, consumi, rates, currentExercise, openPct
                 </td>
                 <td style={{ padding:'8px 10px', textAlign:'right' }}>
                   {hasSomeConsuntivo&&tP>0?(
-                    <button onClick={()=>openPct(`Totale — ${selectedAnno}`,`Consuntivo ${selectedAnno}`,tC_raw,`Preventivo ${selectedAnno}`,tP)}
+                    <button onClick={()=>openPct(`Totale — ${selectedAnno}`,`Consuntivo ${selectedAnno}`,tC_raw,`SSA ${selectedAnno}`,tP)}
                       style={{ fontWeight:800, color:pct(tC_raw,tP)>0?'var(--red)':'var(--green)', background:pct(tC_raw,tP)>0?'var(--red-bg)':'var(--green-bg)', border:'none', borderRadius:5, padding:'2px 7px', fontSize:12, cursor:'pointer', textDecoration:'underline dotted' }}>
                       {pct(tC_raw,tP)>=0?'+':'-'}{Math.abs(pct(tC_raw,tP)).toFixed(1)}%
                     </button>
@@ -1654,16 +1805,17 @@ function ConfriontoTab({ allYrs, fixed, consumi, rates, currentExercise, openPct
               <YAxis tick={{ fill:'#94a3b8', fontSize:9 }} axisLine={false} tickLine={false} tickFormatter={(v:number)=>`€${v}`} width={48}/>
               <Tooltip content={<ChartTip/>}/>
               <Legend wrapperStyle={{ fontSize:11 }}/>
-              <Bar dataKey="prev" name="Preventivo" fill="#94a3b8" radius={[3,3,0,0]}/>
-              <Bar dataKey="cons" name="Consuntivo" fill={isCurrent?'#f59e0b':'#2563eb'} radius={[3,3,0,0]}/>
+              <Bar dataKey="prev" name="SSA / Storico" fill="#94a3b8" radius={[3,3,0,0]}/>
+              <Bar dataKey="cons" name="Consuntivo DB" fill={isCurrent?'#f59e0b':'#2563eb'} radius={[3,3,0,0]}/>
             </BarChart>
           </ResponsiveContainer>
-          {isCurrent&&<p style={{ fontSize:10, color:'#b45309', textAlign:'center', marginTop:4 }}>★ Consuntivo parziale — si aggiorna man mano che inserisci dati</p>}
+          {isCurrent&&<p style={{ fontSize:10, color:'#b45309', textAlign:'center', marginTop:4 }}>★ Consuntivo parziale</p>}
         </div>
       )}
 
       <div style={{ background:'var(--blue-bg)', border:'1px solid #bfdbfe', borderRadius:12, padding:'12px 14px', fontSize:12, color:'var(--blue)' }}>
-        <strong>Millesimi (riparto SSA 10/12/2025):</strong> App C63: 3,394‰ prop · 3,394‰ gen · 20,288‰ scala C — Box 13: 0,576‰ prop · 3,443‰ scala C — Cantina: 0,059‰
+        <strong>Millesimi Valentino (riparto SSA 10/12/2025):</strong> App C63: 3,394‰ prop/gen · 20,288‰ scala C — Box 13: 0,576‰ prop · 3,443‰ scala C — Cantina: 0,059‰
+        <br/><strong>Dati storici:</strong> 19/20→22/23 da rendiconto SSA (PDF Binder2). 23/24→25/26 da DB app.
       </div>
     </div>
   );
