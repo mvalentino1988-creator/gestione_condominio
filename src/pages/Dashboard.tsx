@@ -2,92 +2,90 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Property } from '../types';
 import type { Page } from '../App';
-import { Plus, Check, X, CreditCard, ChevronRight, TrendingUp, TrendingDown, ArrowUpDown, AlertCircle } from 'lucide-react';
+import { Plus, Check, X, CreditCard, ChevronRight, TrendingUp, TrendingDown, Info, Star } from 'lucide-react';
 
-// ── utils ─────────────────────────────────────────────────────
-const f2  = (n: number) => Math.abs(n).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fa  = (n: number) => Math.abs(n).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const f0  = (n: number) => Math.abs(n).toLocaleString('it-IT', { maximumFractionDigits: 0 });
-const fmtFull = (s: string) => s ? new Date(s).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
-const fmtShort = (s: string) => s ? new Date(s).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' }) : '—';
+const fmtDate = (s: string) => s ? new Date(s).toLocaleDateString('it-IT') : '—';
 const calcSaldo = (start: number, rate: number, spese: number) => start - rate + spese;
 
-/**
- * Calcola l'anno esercizio dalla data passata.
- * Il ciclo SSA va da ottobre a settembre:
- *   ottobre 2025 → febbraio 2026  →  "25/26"
- *   marzo 2025   → settembre 2025 →  "24/25"
- */
-const getAnnoEsercizio = (date: Date = new Date()): string => {
-  const m = date.getMonth() + 1; // 1–12
-  const y = date.getFullYear();
-  if (m >= 10) {
-    // da ottobre in poi: l'anno INIZIA quest'anno
-    return `${String(y).slice(2)}/${String(y + 1).slice(2)}`;
+// ── Esercizio in corso ────────────────────────────────────────
+function getCurrentExerciseLabel(): string {
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+  if (month >= 10) {
+    return `${String(year).slice(2)}/${String(year + 1).slice(2)}`;
   } else {
-    // da gennaio a settembre: siamo DENTRO l'anno iniziato l'anno scorso
-    return `${String(y - 1).slice(2)}/${String(y).slice(2)}`;
+    return `${String(year - 1).slice(2)}/${String(year).slice(2)}`;
   }
-};
+}
 
-const getPrevAnno = (yl: string): string => {
-  const [a, b] = yl.split('/').map(Number);
-  return `${String(a - 1).padStart(2, '0')}/${String(b - 1).padStart(2, '0')}`;
-};
-
-const annoFromDate = (d: string): string => {
-  if (!d) return '';
-  const dt = new Date(d), m = dt.getMonth() + 1, y = dt.getFullYear();
-  return m >= 10
-    ? `${String(y).slice(2)}/${String(y + 1).slice(2)}`
-    : `${String(y - 1).slice(2)}/${String(y).slice(2)}`;
-};
+const CURRENT_EXERCISE = getCurrentExerciseLabel();
 
 const ripartiRata = (tot: number) => {
   const m = 3.394 + 0.576 + 0.059;
   return {
-    casa:    parseFloat((tot * 3.394 / m).toFixed(2)),
-    box:     parseFloat((tot * 0.576 / m).toFixed(2)),
-    cantina: parseFloat((tot * 0.059 / m).toFixed(2)),
+    casa:     parseFloat((tot * 3.394 / m).toFixed(2)),
+    box:      parseFloat((tot * 0.576 / m).toFixed(2)),
+    cantina:  parseFloat((tot * 0.059 / m).toFixed(2)),
   };
 };
 
-// ── Modale confronto ──────────────────────────────────────────
-function ConfrontoModal({
-  curLabel, curVal, prevLabel, prevVal, onClose
-}: { curLabel: string; curVal: number; prevLabel: string; prevVal: number; onClose: () => void }) {
-  const delta = curVal - prevVal;
-  const pct   = prevVal !== 0 ? (delta / Math.abs(prevVal)) * 100 : 0;
-  const pos   = delta >= 0;
+const annoFromDate = (d: string) => {
+  if (!d) return '';
+  const dt = new Date(d), m = dt.getMonth() + 1, y = dt.getFullYear();
+  return m >= 10
+    ? `${String(y).slice(2)}/${String(y+1).slice(2)}`
+    : `${String(y-1).slice(2)}/${String(y).slice(2)}`;
+};
 
+// Modal per spiegare il calcolo di una variazione %
+function PctDetailModal({
+  title, curLabel, curVal, prevLabel, prevVal, pct, onClose
+}: {
+  title: string;
+  curLabel: string; curVal: number;
+  prevLabel: string; prevVal: number;
+  pct: number;
+  onClose: () => void;
+}) {
   return (
     <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(26,24,20,0.45)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, backdropFilter: 'blur(4px)' }}
+      style={{ position:'fixed', inset:0, background:'rgba(26,31,46,0.5)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:20, backdropFilter:'blur(4px)' }}
       onClick={onClose}
     >
-      <div className="card fade-up" style={{ width: '100%', maxWidth: 320, padding: 24, boxShadow: 'var(--shadow-lg)' }} onClick={e => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-          <p style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700 }}>Confronto saldi</p>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 0 }}>×</button>
+      <div
+        className="card fade-up"
+        style={{ width:'100%', maxWidth:360, padding:24, boxShadow:'var(--shadow-lg)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+          <p style={{ fontFamily:'var(--font-display)', fontWeight:800, fontSize:17 }}>{title}</p>
+          <button onClick={onClose} style={{ background:'transparent', border:'none', color:'var(--text3)', cursor:'pointer', padding:4 }}><X size={16}/></button>
         </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
-          {[{ label: prevLabel, val: prevVal }, { label: curLabel, val: curVal }].map(({ label, val }) => (
-            <div key={label} style={{ background: 'var(--bg3)', borderRadius: 10, padding: '12px 10px', textAlign: 'center' }}>
-              <p style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text3)', marginBottom: 6 }}>{label}</p>
-              <p style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 700, color: val >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                {val >= 0 ? '+' : '−'}€{f0(val)}
-              </p>
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+            <div style={{ background:'var(--bg3)', borderRadius:10, padding:'10px 12px', textAlign:'center' }}>
+              <p style={{ fontSize:10, color:'var(--text3)', fontWeight:700, textTransform:'uppercase', marginBottom:4 }}>{prevLabel}</p>
+              <p style={{ fontWeight:800, fontSize:18, fontFamily:'var(--font-display)' }}>€{f0(prevVal)}</p>
             </div>
-          ))}
-        </div>
-
-        <div style={{ background: pos ? 'var(--green-bg)' : 'var(--red-bg)', border: `1px solid ${pos ? 'var(--accent-mid)' : '#f0b8b4'}`, borderRadius: 10, padding: '12px 14px', textAlign: 'center' }}>
-          <p style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Variazione</p>
-          <p style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 700, color: pos ? 'var(--green)' : 'var(--red)' }}>
-            {pos ? '+' : '−'}€{f0(Math.abs(delta))}
-          </p>
-          <p style={{ fontSize: 13, fontWeight: 700, color: pos ? 'var(--green)' : 'var(--red)', marginTop: 4 }}>
-            {pct >= 0 ? '+' : ''}{pct.toFixed(1)}%
+            <div style={{ background:'var(--accent-light)', border:'1px solid var(--accent-mid)', borderRadius:10, padding:'10px 12px', textAlign:'center' }}>
+              <p style={{ fontSize:10, color:'var(--accent)', fontWeight:700, textTransform:'uppercase', marginBottom:4 }}>{curLabel}</p>
+              <p style={{ fontWeight:800, fontSize:18, fontFamily:'var(--font-display)', color:'var(--accent)' }}>€{f0(curVal)}</p>
+            </div>
+          </div>
+          <div style={{ background:'var(--bg3)', borderRadius:10, padding:'10px 12px' }}>
+            <p style={{ fontSize:12, color:'var(--text2)', marginBottom:4 }}>Formula</p>
+            <p style={{ fontSize:13, fontFamily:'monospace', color:'var(--text)' }}>
+              ({f0(curVal)} − {f0(prevVal)}) / |{f0(prevVal)}| × 100
+            </p>
+            <p style={{ fontSize:13, fontWeight:800, color: pct > 0 ? 'var(--red)' : 'var(--green)', marginTop:6 }}>
+              = {pct > 0 ? '+' : ''}{pct.toFixed(1)}%
+            </p>
+          </div>
+          <p style={{ fontSize:11, color:'var(--text3)', textAlign:'center' }}>
+            {pct > 0 ? '▲ Aumentato' : '▼ Diminuito'} di €{f0(Math.abs(curVal - prevVal))}
           </p>
         </div>
       </div>
@@ -95,33 +93,36 @@ function ConfrontoModal({
   );
 }
 
-// ── Componente principale ─────────────────────────────────────
 export default function Dashboard({ property, setPage }: { property: Property; setPage: (p: Page) => void }) {
-  const [allYears,     setAllYears]     = useState<any[]>([]);
-  const [rates,        setRates]        = useState<any[]>([]);
-  const [loading,      setLoading]      = useState(true);
-  const [showForm,     setShowForm]     = useState(false);
-  const [saving,       setSaving]       = useState(false);
-  const [sortAsc,      setSortAsc]      = useState(false);
-  const [showModal,    setShowModal]    = useState(false);
-  const [form, setForm] = useState({
-    importo: '', data: new Date().toISOString().split('T')[0], nota: '',
-  });
-
-  // Anno corrente SEMPRE calcolato dalla data di oggi — mai hardcoded
-  const annoCorrente   = getAnnoEsercizio(new Date());
-  const annoPrecedente = getPrevAnno(annoCorrente);
+  const [lastYear, setLastYear] = useState<any>(null);
+  const [prevYear, setPrevYear] = useState<any>(null);
+  const [currentYear, setCurrentYear] = useState<any>(null); // esercizio in corso
+  const [rates,    setRates]    = useState<any[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [saving,   setSaving]   = useState(false);
+  const [form, setForm] = useState({ importo: '', data: new Date().toISOString().split('T')[0], nota: '' });
+  const [pctModal, setPctModal] = useState<null | {
+    title: string; curLabel: string; curVal: number; prevLabel: string; prevVal: number; pct: number;
+  }>(null);
 
   useEffect(() => { load(); }, [property.id]);
 
   const load = async () => {
-    setLoading(true);
-    const [{ data: yrs }, { data: rts }] = await Promise.all([
+    const [{ data: years }, { data: ratesData }] = await Promise.all([
       supabase.from('exercise_years').select('*').eq('property_id', property.id).order('year_label', { ascending: false }),
-      supabase.from('rate_pagamenti').select('*').eq('property_id', property.id).order('data_pagamento', { ascending: false }),
+      supabase.from('rate_pagamenti').select('*').eq('property_id', property.id).order('data_pagamento', { ascending: false }).limit(5),
     ]);
-    setAllYears(yrs || []);
-    setRates(rts || []);
+    // Trova l'esercizio in corso, poi l'ultimo con dati, poi il precedente
+    const currIdx = years?.findIndex(y => y.year_label === CURRENT_EXERCISE) ?? -1;
+    const curr = currIdx !== -1 ? years![currIdx] : null;
+    setCurrentYear(curr);
+    // Per i saldi, usa l'esercizio in corso se disponibile, altrimenti l'ultimo
+    const displayYear = curr || years?.[0] || null;
+    const prevDisplayYear = displayYear ? (years?.find(y => y.year_label !== displayYear.year_label) || null) : null;
+    setLastYear(displayYear);
+    setPrevYear(prevDisplayYear);
+    setRates(ratesData || []);
     setLoading(false);
   };
 
@@ -130,13 +131,11 @@ export default function Dashboard({ property, setPage }: { property: Property; s
     if (!tot || isNaN(tot)) return;
     setSaving(true);
     const yl = annoFromDate(form.data);
-    const { count } = await supabase
-      .from('rate_pagamenti').select('*', { count: 'exact', head: true })
-      .eq('property_id', property.id).eq('year_label', yl);
+    const { count } = await supabase.from('rate_pagamenti').select('*', { count: 'exact', head: true }).eq('property_id', property.id).eq('year_label', yl);
     const { casa, box, cantina } = ripartiRata(tot);
     await supabase.from('rate_pagamenti').insert({
       property_id: property.id, year_label: yl,
-      numero_rata: `Rata ${(count || 0) + 1}`,
+      numero_rata: `Rata ${(count||0)+1}`,
       data_pagamento: form.data,
       importo_casa: casa, importo_box: box, importo_cantina: cantina,
       descrizione: form.nota,
@@ -147,284 +146,233 @@ export default function Dashboard({ property, setPage }: { property: Property; s
     load();
   };
 
-  if (loading) return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '60px 0', gap: 10, color: 'var(--text3)' }}>
-      <div style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid var(--border2)', borderTopColor: 'var(--accent)', animation: 'spin 0.6s linear infinite' }} />
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-    </div>
-  );
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text3)' }}>Caricamento...</div>;
 
-  // Cerca i dati ESATTAMENTE per l'anno corrente
-  const curYearData  = allYears.find(y => y.year_label === annoCorrente) ?? null;
-  // Cerca i dati per l'anno precedente
-  const prevYearData = allYears.find(y => y.year_label === annoPrecedente) ?? null;
+  const sC  = lastYear ? calcSaldo(lastYear.balance_start_casa,    lastYear.rates_paid_casa,    lastYear.spese_totali_casa    || 0) : null;
+  const sB  = lastYear ? calcSaldo(lastYear.balance_start_box,     lastYear.rates_paid_box,     lastYear.spese_totali_box     || 0) : null;
+  const sCa = lastYear ? calcSaldo(lastYear.balance_start_cantina, lastYear.rates_paid_cantina, lastYear.spese_totali_cantina || 0) : null;
+  const sTot = sC !== null ? sC + sB! + sCa! : null;
 
-  // Saldo anno corrente (solo se i dati esistono)
-  const saldoCur = curYearData
-    ? calcSaldo(curYearData.balance_start_casa, curYearData.rates_paid_casa, curYearData.spese_totali_casa || 0)
-    + calcSaldo(curYearData.balance_start_box,  curYearData.rates_paid_box,  curYearData.spese_totali_box  || 0)
-    + calcSaldo(curYearData.balance_start_cantina, curYearData.rates_paid_cantina, curYearData.spese_totali_cantina || 0)
-    : null;
+  const pC  = prevYear ? calcSaldo(prevYear.balance_start_casa,    prevYear.rates_paid_casa,    prevYear.spese_totali_casa    || 0) : null;
+  const pTot = pC !== null ? pC + calcSaldo(prevYear.balance_start_box, prevYear.rates_paid_box, prevYear.spese_totali_box||0) + calcSaldo(prevYear.balance_start_cantina, prevYear.rates_paid_cantina, prevYear.spese_totali_cantina||0) : null;
 
-  // Saldo anno precedente
-  const saldoPrev = prevYearData
-    ? calcSaldo(prevYearData.balance_start_casa, prevYearData.rates_paid_casa, prevYearData.spese_totali_casa || 0)
-    + calcSaldo(prevYearData.balance_start_box,  prevYearData.rates_paid_box,  prevYearData.spese_totali_box  || 0)
-    + calcSaldo(prevYearData.balance_start_cantina, prevYearData.rates_paid_cantina, prevYearData.spese_totali_cantina || 0)
-    : null;
+  // Rate dell'esercizio in corso
+  const annoCorrente = CURRENT_EXERCISE;
+  const totRateAnno  = rates.filter(r => r.year_label === annoCorrente).reduce((s: number, r: any) => s + (parseFloat(r.importo_casa)||0) + (parseFloat(r.importo_box)||0) + (parseFloat(r.importo_cantina)||0), 0);
+  const nRateAnno    = rates.filter(r => r.year_label === annoCorrente).length;
 
-  // Rate anno corrente
-  const rateCurAnno = rates.filter(r => r.year_label === annoCorrente);
-  const totRateCur  = rateCurAnno.reduce((s: number, r: any) =>
-    s + (parseFloat(r.importo_casa) || 0) + (parseFloat(r.importo_box) || 0) + (parseFloat(r.importo_cantina) || 0), 0);
-
-  // Preview
   const preview   = form.importo && parseFloat(form.importo) > 0 ? ripartiRata(parseFloat(form.importo)) : null;
   const ylPreview = annoFromDate(form.data);
 
-  // Rates sorted
-  const sortedRates = [...rates].sort((a, b) => {
-    const da = new Date(a.data_pagamento).getTime();
-    const db = new Date(b.data_pagamento).getTime();
-    return sortAsc ? da - db : db - da;
-  });
-
-  const creditoDebito = saldoCur !== null
-    ? { label: saldoCur >= 0 ? 'In credito' : 'In debito', color: saldoCur >= 0 ? 'var(--green)' : 'var(--red)', bg: saldoCur >= 0 ? 'var(--green-bg)' : 'var(--red-bg)', border: saldoCur >= 0 ? 'var(--accent-mid)' : '#f0b8b4' }
+  // calcolo % saldo vs anno precedente
+  const saldoPct = (sTot !== null && pTot !== null && pTot !== 0)
+    ? ((sTot - pTot) / Math.abs(pTot)) * 100
     : null;
 
+  const displayedExerciseLabel = lastYear?.year_label || '';
+  const isCurrentExerciseDisplayed = displayedExerciseLabel === CURRENT_EXERCISE;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
 
-      {/* ── Intestazione: solo nome immobile, no unità ── */}
-      <div>
-        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
-          {property.address || 'Il tuo immobile'}
+      {/* ── Intestazione immobile ── */}
+      <div style={{ paddingTop: 4 }}>
+        <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>
+          Cohabitat Lambrate · Via Pitteri 93
         </p>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 700, color: 'var(--ink)', letterSpacing: '-0.01em', lineHeight: 1.2 }}>
-          {property.name}
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, color: 'var(--text)', lineHeight: 1.15 }}>
+          App C63 · Box 13 · Cant.10
         </h1>
-        <p style={{ fontSize: 13, color: 'var(--text3)', marginTop: 5 }}>
-          Esercizio corrente:&ensp;
-          <span style={{ fontWeight: 700, color: 'var(--ink)', fontFamily: 'var(--font-display)' }}>{annoCorrente}</span>
-        </p>
-      </div>
-
-      {/* ── Saldo anno corrente ── */}
-      {saldoCur !== null ? (
-        <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden' }}>
-          {/* header card */}
-          <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <p style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'var(--text3)' }}>
-              Saldo esercizio {annoCorrente}
+        {lastYear && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+            <p style={{ fontSize: 13, color: 'var(--text3)' }}>
+              Esercizio <strong style={{ color: isCurrentExerciseDisplayed ? '#b45309' : 'var(--accent)' }}>{displayedExerciseLabel}</strong>
             </p>
-            <span style={{ fontSize: 11, fontWeight: 700, color: creditoDebito!.color, background: creditoDebito!.bg, border: `1px solid ${creditoDebito!.border}`, borderRadius: 20, padding: '2px 10px' }}>
-              {creditoDebito!.label}
-            </span>
-          </div>
-
-          {/* numero grande */}
-          <div style={{ padding: '20px 20px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
-            <div>
-              <p style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: 48,
-                fontWeight: 700,
-                letterSpacing: '-0.03em',
-                lineHeight: 1,
-                color: saldoCur >= 0 ? 'var(--green)' : 'var(--red)',
-              }}>
-                {saldoCur >= 0 ? '+' : '−'}€{f0(Math.abs(saldoCur))}
-              </p>
-              <p style={{ fontSize: 12, color: 'var(--text3)', marginTop: 6 }}>
-                {saldoCur >= 0
-                  ? 'Il condominio ti è in credito'
-                  : 'Hai un debito residuo con il condominio'}
-              </p>
-            </div>
-
-            {/* confronto anno precedente */}
-            {saldoPrev !== null && (
-              <button
-                onClick={() => setShowModal(true)}
-                style={{
-                  background: 'var(--bg3)', border: '1px solid var(--border)',
-                  borderRadius: 10, padding: '10px 14px', cursor: 'pointer',
-                  textAlign: 'right',
-                }}
-              >
-                <p style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>
-                  vs {annoPrecedente}
-                </p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>
-                  {saldoCur > saldoPrev ? <TrendingUp size={13} color="var(--green)" /> : <TrendingDown size={13} color="var(--red)" />}
-                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, color: saldoCur > saldoPrev ? 'var(--green)' : 'var(--red)' }}>
-                    {saldoCur > saldoPrev ? '+' : '−'}€{f0(Math.abs(saldoCur - saldoPrev))}
-                  </span>
-                </div>
-                <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
-                  {(() => {
-                    const p = saldoPrev !== 0 ? ((saldoCur - saldoPrev) / Math.abs(saldoPrev)) * 100 : 0;
-                    return `${p >= 0 ? '+' : ''}${p.toFixed(1)}%`;
-                  })()}
-                </p>
-              </button>
+            {isCurrentExerciseDisplayed && (
+              <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10, fontWeight:700, color:'#b45309', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:6, padding:'2px 8px' }}>
+                <Star size={9} fill="#b45309" color="#b45309"/> IN CORSO
+              </span>
             )}
-          </div>
-        </div>
-      ) : (
-        /* nessun dato per l'anno corrente */
-        <div style={{ background: 'var(--amber-bg)', border: '1px solid #f0d880', borderRadius: 14, padding: '16px 18px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-          <AlertCircle size={18} color="var(--amber)" style={{ flexShrink: 0, marginTop: 1 }} />
-          <div>
-            <p style={{ fontWeight: 700, fontSize: 14, color: 'var(--amber)' }}>
-              Nessun rendiconto per il {annoCorrente}
-            </p>
-            <p style={{ fontSize: 12, color: 'var(--amber)', opacity: 0.85, marginTop: 3 }}>
-              Quando ricevi il rendiconto SSA, inserisci i dati in{' '}
-              <button
-                onClick={() => setPage('dati')}
-                style={{ background: 'transparent', border: 'none', color: 'var(--amber)', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer', fontSize: 12, padding: 0 }}
-              >
-                Dati → Rendiconto
-              </button>
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* ── Registra rata ── */}
-      <div>
-        <p className="section-label">Azioni rapide</p>
-        {!showForm ? (
-          <button
-            onClick={() => setShowForm(true)}
-            style={{
-              width: '100%', background: 'var(--accent)', color: '#fff',
-              borderRadius: 13, padding: '15px 18px',
-              display: 'flex', alignItems: 'center', gap: 13,
-              boxShadow: '0 3px 12px rgba(45,106,79,0.28)',
-              border: 'none', cursor: 'pointer', fontFamily: 'var(--font-body)',
-            }}
-          >
-            <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 9, padding: 9, flexShrink: 0 }}>
-              <CreditCard size={18} color="#fff" />
-            </div>
-            <div style={{ textAlign: 'left', flex: 1 }}>
-              <p style={{ fontWeight: 800, fontSize: 15, color: '#fff' }}>Registra pagamento rata</p>
-              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)', marginTop: 2 }}>
-                {totRateCur > 0
-                  ? `Esercizio ${annoCorrente} · €${f0(totRateCur)} versati finora`
-                  : `Nessun pagamento inserito per il ${annoCorrente}`}
-              </p>
-            </div>
-            <Plus size={18} color="rgba(255,255,255,0.7)" />
-          </button>
-        ) : (
-          <div className="card" style={{ border: '2px solid var(--accent)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-              <p style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 18 }}>Nuovo pagamento</p>
-              <button onClick={() => setShowForm(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: 0, fontSize: 20, lineHeight: 1 }}>×</button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div>
-                <label>Importo totale (€)</label>
-                <input
-                  type="number" step="0.01" placeholder="es. 413,50"
-                  value={form.importo}
-                  onChange={e => setForm(p => ({ ...p, importo: e.target.value }))}
-                  style={{ fontSize: 26, fontWeight: 700, textAlign: 'center', fontFamily: 'var(--font-display)' }}
-                  autoFocus
-                />
-              </div>
-              <div>
-                <label>Data pagamento</label>
-                <input type="date" value={form.data} onChange={e => setForm(p => ({ ...p, data: e.target.value }))} />
-              </div>
-
-              {/* Preview ripartizione */}
-              <div style={{ background: 'var(--accent-light)', border: '1px solid var(--accent-mid)', borderRadius: 10, padding: '12px 14px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: preview ? 10 : 0 }}>
-                  <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>Esercizio rilevato automaticamente</p>
-                  <span style={{ fontWeight: 800, fontSize: 14, color: 'var(--accent)', fontFamily: 'var(--font-display)' }}>{ylPreview || '—'}</span>
-                </div>
-                {preview ? (
-                  <div className="grid3">
-                    {([['App', preview.casa], ['Box', preview.box], ['Cant.', preview.cantina]] as [string, number][]).map(([l, v]) => (
-                      <div key={l} style={{ textAlign: 'center', background: '#fff', borderRadius: 8, padding: '7px 4px' }}>
-                        <p style={{ fontSize: 10, color: 'var(--text2)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>{l}</p>
-                        <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)' }}>€{f2(v)}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p style={{ fontSize: 11, color: 'var(--accent)', opacity: 0.75 }}>Ripartizione per millesimi calcolata automaticamente</p>
-                )}
-              </div>
-
-              <div>
-                <label>Note (opzionale)</label>
-                <input placeholder="es. Acconto, Conguaglio…" value={form.nota} onChange={e => setForm(p => ({ ...p, nota: e.target.value }))} />
-              </div>
-
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                <button className="btn-ghost" onClick={() => setShowForm(false)}><X size={13} /> Annulla</button>
-                <button className="btn-primary" onClick={saveRate} disabled={saving || !form.importo}>
-                  {saving ? 'Salvataggio…' : <><Check size={13} /> Salva</>}
-                </button>
-              </div>
-            </div>
           </div>
         )}
       </div>
 
-      {/* ── Storico pagamenti ── */}
-      {rates.length > 0 && (
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <p className="section-label" style={{ margin: 0 }}>Pagamenti recenti</p>
-            <button
-              onClick={() => setSortAsc(v => !v)}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                background: 'var(--bg3)', border: '1px solid var(--border)',
-                borderRadius: 20, padding: '4px 10px', fontSize: 10, fontWeight: 700,
-                color: 'var(--text3)', cursor: 'pointer', letterSpacing: '0.06em', textTransform: 'uppercase',
-              }}
-            >
-              <ArrowUpDown size={9} />
-              {sortAsc ? 'Meno recenti' : 'Più recenti'}
-            </button>
+      {/* ── Banner esercizio in corso (se non è già quello mostrato) ── */}
+      {!isCurrentExerciseDisplayed && (
+        <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:10, padding:'8px 12px', display:'flex', alignItems:'center', gap:8 }}>
+          <Star size={12} fill="#b45309" color="#b45309"/>
+          <span style={{ fontSize:12, color:'#92400e' }}>
+            Esercizio in corso: <strong>{CURRENT_EXERCISE}</strong>
+            {totRateAnno > 0 && ` · €${f0(totRateAnno)} versati (${nRateAnno} ${nRateAnno===1?'rata':'rate'})`}
+          </span>
+        </div>
+      )}
+
+      {/* ── Saldi 3 colonne ── */}
+      {sTot !== null && (
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          <p className="section-label">
+            Saldo esercizio {displayedExerciseLabel}
+            {isCurrentExerciseDisplayed && <span style={{ marginLeft:6, fontSize:10, color:'#b45309' }}>★ in corso</span>}
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+            {([['App C63', sC!], ['Box 13', sB!], ['Cantina', sCa!]] as [string,number][]).map(([l, v]) => (
+              <div key={l} style={{
+                background: 'var(--bg2)',
+                border: `2px solid ${v >= 0 ? '#a7f3d0' : '#fecaca'}`,
+                borderRadius: 12, padding: '14px 12px', textAlign: 'center',
+              }}>
+                <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 6 }}>{l}</p>
+                <p style={{ fontSize: 20, fontWeight: 800, fontFamily: 'var(--font-display)', color: v >= 0 ? 'var(--green)' : 'var(--red)', lineHeight: 1 }}>€{f0(v)}</p>
+                <p style={{ fontSize: 10, fontWeight: 700, color: v >= 0 ? 'var(--green)' : 'var(--red)', marginTop: 4 }}>{v >= 0 ? '▲ credito' : '▼ debito'}</p>
+              </div>
+            ))}
           </div>
 
-          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
-            {sortedRates.slice(0, 5).map((r: any, i: number) => {
-              const tot = (parseFloat(r.importo_casa) || 0) + (parseFloat(r.importo_box) || 0) + (parseFloat(r.importo_cantina) || 0);
-              const isLast = i === Math.min(sortedRates.length, 5) - 1;
+          {/* Totale e delta cliccabile — confronto con esercizio in corso */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10 }}>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: 12, color: 'var(--text3)' }}>Totale (C63 + Box + Cantina)</p>
+              <p style={{ fontSize: 26, fontWeight: 800, fontFamily: 'var(--font-display)', color: sTot >= 0 ? 'var(--green)' : 'var(--red)' }}>€{fa(sTot)}</p>
+            </div>
+            {pTot !== null && sTot !== null && saldoPct !== null && (
+              <button
+                onClick={() => setPctModal({
+                  title: 'Variazione saldo',
+                  prevLabel: prevYear.year_label,
+                  prevVal: pTot,
+                  curLabel: lastYear.year_label,
+                  curVal: sTot,
+                  pct: saldoPct,
+                })}
+                style={{
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2,
+                  padding: '6px 8px', borderRadius: 8,
+                  transition: 'background 0.15s',
+                }}
+                title="Clicca per vedere il calcolo"
+              >
+                <p style={{ fontSize: 11, color: 'var(--text3)' }}>vs {prevYear.year_label}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                  {sTot > pTot ? <TrendingUp size={14} color="var(--green)" /> : <TrendingDown size={14} color="var(--red)" />}
+                  <span style={{ fontSize: 14, fontWeight: 700, color: sTot > pTot ? 'var(--green)' : 'var(--red)' }}>
+                    {sTot > pTot ? '+' : '-'}€{f0(Math.abs(sTot - pTot))}
+                  </span>
+                </div>
+                <span style={{
+                  fontSize: 11, fontWeight: 700,
+                  color: saldoPct > 0 ? 'var(--green)' : 'var(--red)',
+                  background: saldoPct > 0 ? 'var(--green-bg)' : 'var(--red-bg)',
+                  borderRadius: 5, padding: '1px 6px',
+                  display: 'flex', alignItems: 'center', gap: 3,
+                }}>
+                  {saldoPct > 0 ? '+' : ''}{saldoPct.toFixed(1)}% <Info size={9}/>
+                </span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Bottone pagamento — associato all'esercizio in corso ── */}
+      {!showForm ? (
+        <div>
+          <p className="section-label">Azioni rapide</p>
+          <button onClick={() => setShowForm(true)} style={{
+            width: '100%', background: 'var(--accent)', color: '#fff',
+            borderRadius: 13, padding: '15px 20px',
+            display: 'flex', alignItems: 'center', gap: 14,
+            boxShadow: '0 3px 10px rgba(22,128,60,0.25)',
+            border: 'none', cursor: 'pointer', fontFamily: 'var(--font-body)',
+          }}>
+            <div style={{ background: 'rgba(255,255,255,0.18)', borderRadius: 9, padding: 9, display: 'flex', flexShrink: 0 }}>
+              <CreditCard size={20} color="#fff" />
+            </div>
+            <div style={{ textAlign: 'left', flex: 1 }}>
+              <p style={{ fontWeight: 800, fontSize: 16, color: '#fff' }}>Registra pagamento</p>
+              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 2 }}>
+                {totRateAnno > 0
+                  ? `${annoCorrente} ★ · €${f0(totRateAnno)} versati finora`
+                  : `Esercizio in corso: ${annoCorrente}`}
+              </p>
+            </div>
+            <Plus size={20} color="rgba(255,255,255,0.8)" />
+          </button>
+        </div>
+      ) : (
+        <div className="card" style={{ border: '2px solid var(--accent)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+            <p style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 19 }}>Nuovo pagamento</p>
+            <button onClick={() => setShowForm(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: 4 }}><X size={18} /></button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <label>Importo totale (€)</label>
+              <input type="number" step="0.01" placeholder="es. 413.50" value={form.importo}
+                onChange={e => setForm(p => ({ ...p, importo: e.target.value }))}
+                style={{ fontSize: 24, fontWeight: 700, textAlign: 'center', padding: '14px' }} autoFocus />
+            </div>
+            <div>
+              <label>Data pagamento</label>
+              <input type="date" value={form.data} onChange={e => setForm(p => ({ ...p, data: e.target.value }))} />
+            </div>
+            {/* Anteprima */}
+            <div style={{ background: 'var(--accent-light)', border: '1px solid var(--accent-mid)', borderRadius: 10, padding: '12px 14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: preview ? 10 : 0 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)' }}>Esercizio rilevato automaticamente</p>
+                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                  <span style={{ fontWeight: 800, fontSize: 15, color: 'var(--accent)', fontFamily: 'var(--font-display)' }}>{ylPreview || '—'}</span>
+                  {ylPreview === CURRENT_EXERCISE && (
+                    <span style={{ fontSize:10, fontWeight:700, color:'#b45309', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:5, padding:'1px 6px' }}>★ in corso</span>
+                  )}
+                </div>
+              </div>
+              {preview ? (
+                <div className="grid3">
+                  {([['App C63', preview.casa], ['Box 13', preview.box], ['Cantina', preview.cantina]] as [string,number][]).map(([l, v]) => (
+                    <div key={l} style={{ textAlign: 'center', background: '#fff', borderRadius: 8, padding: '8px 4px' }}>
+                      <p style={{ fontSize: 11, color: 'var(--text2)', fontWeight: 600, marginBottom: 3 }}>{l}</p>
+                      <p style={{ fontSize: 15, fontWeight: 800, color: 'var(--accent)' }}>€{fa(v)}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ fontSize: 12, color: 'var(--accent)', opacity: 0.8 }}>Ripartizione per millesimi calcolata automaticamente</p>
+              )}
+            </div>
+            <div>
+              <label>Note (opzionale)</label>
+              <input placeholder="es. Acconto, Conguaglio..." value={form.nota} onChange={e => setForm(p => ({ ...p, nota: e.target.value }))} />
+            </div>
+            <button className="btn-primary" onClick={saveRate} disabled={saving || !form.importo}
+              style={{ width: '100%', justifyContent: 'center', padding: '13px', fontSize: 15 }}>
+              {saving ? 'Salvataggio...' : <><Check size={16} /> Salva pagamento</>}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Ultimi pagamenti — più recente in cima ── */}
+      {rates.length > 0 && (
+        <div>
+          <p className="section-label">Ultimi pagamenti</p>
+          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+            {rates.slice(0, 4).map((r: any, i: number) => {
+              const tot = (parseFloat(r.importo_casa)||0) + (parseFloat(r.importo_box)||0) + (parseFloat(r.importo_cantina)||0);
+              const isCurrentExYear = r.year_label === CURRENT_EXERCISE;
               return (
-                <div
-                  key={r.id}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 12,
-                    padding: '12px 16px',
-                    borderBottom: isLast ? 'none' : '1px solid var(--border)',
-                  }}
-                >
-                  <div style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--accent-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <CreditCard size={15} color="var(--accent)" />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontWeight: 700, fontSize: 13 }}>
+                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: i < Math.min(rates.length, 4) - 1 ? '1px solid var(--border)' : 'none', background: isCurrentExYear ? '#fffdf5' : 'transparent' }}>
+                  <CreditCard size={16} color={isCurrentExYear ? '#b45309' : 'var(--accent)'} />
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontWeight: 700, fontSize: 14 }}>
                       {r.numero_rata}
-                      <span style={{ color: 'var(--text3)', fontWeight: 500, fontSize: 12, marginLeft: 6 }}>· {r.year_label}</span>
+                      <span style={{ color: 'var(--text3)', fontWeight: 400, fontSize: 13 }}> · {r.year_label}</span>
+                      {isCurrentExYear && <span style={{ marginLeft:5, fontSize:10, fontWeight:700, color:'#b45309' }}>★</span>}
                     </p>
-                    <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>
-                      {fmtShort(r.data_pagamento)}{r.descrizione ? ` · ${r.descrizione}` : ''}
-                    </p>
+                    <p style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{fmtDate(r.data_pagamento)}{r.descrizione ? ` · ${r.descrizione}` : ''}</p>
                   </div>
-                  <p style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 15, color: 'var(--ink)', flexShrink: 0 }}>
-                    €{f2(tot)}
-                  </p>
+                  <p style={{ fontWeight: 800, fontSize: 16, fontFamily: 'var(--font-display)', color: 'var(--text)' }}>€{fa(tot)}</p>
                 </div>
               );
             })}
@@ -437,49 +385,27 @@ export default function Dashboard({ property, setPage }: { property: Property; s
         <p className="section-label">Sezioni</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {([
-            {
-              page: 'dati' as Page,
-              title: 'Dati annuali',
-              sub: 'Rendiconto · Spese · Consumi · Rate · Confronto · Preventivo',
-            },
-            {
-              page: 'note' as Page,
-              title: 'Note e scadenze',
-              sub: 'Appunti · Comunicazioni SSA · Scadenze',
-            },
+            { page: 'dati' as Page, title: 'Dati annuali e analisi', sub: 'Rendiconto · Spese · Consumi · Grafici · Confronto · Preventivo' },
+            { page: 'note' as Page, title: 'Note e scadenze',        sub: 'Appunti · Comunicazioni SSA · Scadenze' },
           ]).map(({ page, title, sub }) => (
-            <button
-              key={page}
-              onClick={() => setPage(page)}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '14px 16px',
-                background: 'var(--bg2)', border: '1px solid var(--border)',
-                borderRadius: 13, cursor: 'pointer', fontFamily: 'var(--font-body)',
-                transition: 'border-color 0.14s',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
-            >
+            <button key={page} onClick={() => setPage(page)} style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '14px 16px', background: 'var(--bg2)', border: '1px solid var(--border)',
+              borderRadius: 12, cursor: 'pointer', fontFamily: 'var(--font-body)',
+            }}>
               <div style={{ textAlign: 'left' }}>
-                <p style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)' }}>{title}</p>
-                <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{sub}</p>
+                <p style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>{title}</p>
+                <p style={{ fontSize: 12, color: 'var(--text3)', marginTop: 3 }}>{sub}</p>
               </div>
-              <ChevronRight size={16} color="var(--text3)" style={{ flexShrink: 0 }} />
+              <ChevronRight size={18} color="var(--text3)" />
             </button>
           ))}
         </div>
       </div>
 
-      {/* ── Modal confronto ── */}
-      {showModal && saldoCur !== null && saldoPrev !== null && (
-        <ConfrontoModal
-          curLabel={annoCorrente}
-          curVal={saldoCur}
-          prevLabel={annoPrecedente}
-          prevVal={saldoPrev}
-          onClose={() => setShowModal(false)}
-        />
+      {/* ── Modal dettaglio % ── */}
+      {pctModal && (
+        <PctDetailModal {...pctModal} onClose={() => setPctModal(null)} />
       )}
     </div>
   );

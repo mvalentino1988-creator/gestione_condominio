@@ -1,11 +1,25 @@
 import { useState, useEffect } from 'react';
 import { getExerciseYears, upsertExerciseYear, deleteExerciseYear } from '../lib/db';
 import type { Property, ExerciseYear } from '../types';
-import { Plus, Pencil, Trash2, X, Check } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Check, Star } from 'lucide-react';
+
+// ── Esercizio in corso ────────────────────────────────────────
+function getCurrentExerciseLabel(): string {
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+  if (month >= 10) {
+    return `${String(year).slice(2)}/${String(year + 1).slice(2)}`;
+  } else {
+    return `${String(year - 1).slice(2)}/${String(year).slice(2)}`;
+  }
+}
+
+const CURRENT_EXERCISE = getCurrentExerciseLabel();
 
 const fmt = (n: number) => n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const empty = (pid: string): Omit<ExerciseYear, 'id' | 'created_at'> => ({
-  property_id: pid, year_label: '',
+  property_id: pid, year_label: CURRENT_EXERCISE,
   balance_start_casa: 0, balance_start_box: 0, balance_start_cantina: 0,
   rates_paid_casa: 0, rates_paid_box: 0, rates_paid_cantina: 0,
 });
@@ -49,6 +63,9 @@ export default function ExerciseYearsPage({ property }: { property: Property }) 
 
   const num = (f: string, v: string) => setEditing(p => ({ ...p, [f]: parseFloat(v) || 0 }));
 
+  // Ordinamento: più recente in cima, più vecchio in fondo
+  const sortedYears = [...years].sort((a, b) => b.year_label.localeCompare(a.year_label));
+
   if (loading) return <Loader />;
 
   return (
@@ -56,7 +73,7 @@ export default function ExerciseYearsPage({ property }: { property: Property }) 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 22 }}>Saldo Esercizio</h2>
-          <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>{years.length} anni registrati</p>
+          <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>{years.length} anni registrati · in corso: <strong>{CURRENT_EXERCISE}</strong></p>
         </div>
         <button className="btn-primary" onClick={openNew}><Plus size={15} /> Nuovo anno</button>
       </div>
@@ -64,12 +81,12 @@ export default function ExerciseYearsPage({ property }: { property: Property }) 
       {editing && (
         <div className="card" style={{ border: '2px solid var(--accent)' }}>
           <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 16 }}>
-            {isNew ? '+ Nuovo anno' : `Modifica ${editing.year_label}`}
+            {isNew ? `+ Nuovo anno (${CURRENT_EXERCISE})` : `Modifica ${editing.year_label}`}
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
               <label>Anno esercizio</label>
-              <input value={editing.year_label || ''} onChange={e => setEditing(p => ({ ...p, year_label: e.target.value }))} placeholder="es. 25/26" />
+              <input value={editing.year_label || ''} onChange={e => setEditing(p => ({ ...p, year_label: e.target.value }))} placeholder={`es. ${CURRENT_EXERCISE}`} />
             </div>
 
             <div style={{ background: 'var(--bg2)', borderRadius: 10, padding: '14px' }}>
@@ -100,21 +117,30 @@ export default function ExerciseYearsPage({ property }: { property: Property }) 
 
       {years.length === 0 && !editing && (
         <div style={{ textAlign: 'center', padding: 30, background: '#fff', borderRadius: 16, border: '1px solid var(--border)' }}>
-          <p style={{ color: 'var(--text2)' }}>Nessun anno inserito.</p>
+          <p style={{ color: 'var(--text2)' }}>Nessun anno inserito. Inizia con l'esercizio in corso: <strong>{CURRENT_EXERCISE}</strong></p>
         </div>
       )}
 
-      {[...years].reverse().map(y => {
+      {/* Più recente in cima, più vecchio in fondo */}
+      {sortedYears.map(y => {
         const saldoCasa = y.balance_start_casa + y.rates_paid_casa;
         const saldoBox = y.balance_start_box + y.rates_paid_box;
         const saldoCantina = y.balance_start_cantina + y.rates_paid_cantina;
         const totale = saldoCasa + saldoBox + saldoCantina;
+        const isCurrent = y.year_label === CURRENT_EXERCISE;
         return (
-          <div key={y.id} className="card">
+          <div key={y.id} className="card" style={isCurrent ? { border:'2px solid #f59e0b', background:'#fffdf5' } : undefined}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
               <div>
-                <span className="tag tag-blue">{y.year_label}</span>
-                <p style={{ marginTop: 8, fontSize: 26, fontWeight: 700, fontFamily: 'var(--font-display)', color: totale >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:6, flexWrap:'wrap' }}>
+                  <span className="tag tag-blue">{y.year_label}</span>
+                  {isCurrent && (
+                    <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10, fontWeight:700, color:'#b45309', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:6, padding:'2px 8px' }}>
+                      <Star size={9} fill="#b45309" color="#b45309"/> IN CORSO
+                    </span>
+                  )}
+                </div>
+                <p style={{ marginTop: 4, fontSize: 26, fontWeight: 700, fontFamily: 'var(--font-display)', color: totale >= 0 ? 'var(--green)' : 'var(--red)' }}>
                   {totale >= 0 ? '+' : ''}€ {fmt(totale)}
                 </p>
                 <p style={{ color: 'var(--text2)', fontSize: 12, marginTop: 2 }}>saldo totale</p>
